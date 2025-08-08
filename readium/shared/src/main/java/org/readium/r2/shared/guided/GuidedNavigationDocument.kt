@@ -20,7 +20,7 @@ public sealed interface GuidedNavigationObject {
 }
 
 public data class GuidedNavigationLeaf(
-    val text: String?,
+    val text: GuidedNavigationText?,
     val refs: Set<GuidedNavigationRef>,
     override val roles: Set<GuidedNavigationRole>,
 ) : GuidedNavigationObject
