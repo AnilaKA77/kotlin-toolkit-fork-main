@@ -13,7 +13,7 @@ import org.readium.r2.shared.util.data.ReadError
 
 @ExperimentalReadiumApi
 public class ReadAloudNavigator private constructor(
-    rootNode: ReadAloudInnerNode,
+    firstLeaf: ReadAloudLeafNode,
     audioEngineFactory: (AudioEngine.Listener) -> AudioEngine,
 ) {
 
@@ -22,9 +22,12 @@ public class ReadAloudNavigator private constructor(
         public suspend operator fun invoke(
             guidedNavigationTree: GuidedNavigationContainer,
             audioEngineFactory: (AudioEngine.Listener) -> AudioEngine,
-        ): ReadAloudNavigator = withContext(Dispatchers.Default) {
-            val tree = GuidedNavigationAdapter().adapt(guidedNavigationTree)
-            ReadAloudNavigator(tree, audioEngineFactory)
+        ): ReadAloudNavigator {
+            val tree = withContext(Dispatchers.Default) {
+                GuidedNavigationAdapter().adapt(guidedNavigationTree)
+            }
+            val firstLeaf = checkNotNull(tree.firstLeaf())
+            return ReadAloudNavigator(firstLeaf, audioEngineFactory)
         }
     }
 
@@ -73,13 +76,13 @@ public class ReadAloudNavigator private constructor(
 
     private val stateMachine = ReadAloudStateMachine(audioEngine)
 
-    private val stateMutable = MutableStateFlow(stateMachine.start(rootNode, paused = false))
+    private val stateMutable = MutableStateFlow(stateMachine.start(firstLeaf, paused = false))
 
     private val playbackMutable: MutableStateFlow<Playback> =
         MutableStateFlow(Playback(state = State.Ready, playWhenReady = true))
 
     private val nodeMutable: MutableStateFlow<ReadAloudNode> =
-        MutableStateFlow(rootNode)
+        MutableStateFlow(firstLeaf)
 
     public val playback: StateFlow<Playback> =
         playbackMutable.asStateFlow()

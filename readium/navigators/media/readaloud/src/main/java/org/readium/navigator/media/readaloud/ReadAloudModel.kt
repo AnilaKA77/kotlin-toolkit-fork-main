@@ -62,20 +62,29 @@ internal fun ReadAloudNode.firstLeaf(): ReadAloudLeafNode? =
     }
 
 @ExperimentalReadiumApi
-internal fun ReadAloudNode.nextLeaf(): ReadAloudLeafNode? {
-    if (children.isNotEmpty()) {
-        return children[0].nextLeaf()
+internal fun ReadAloudNode.nextLeaf(): ReadAloudLeafNode? =
+    when (this) {
+        is ReadAloudInnerNode -> firstLeaf()
+        is ReadAloudLeafNode -> {
+            val siblings = parent.children
+            val currentIndex = siblings.indexOf(this)
+            check(currentIndex != -1)
+
+            if (currentIndex < siblings.size - 1) {
+                val sister = siblings[currentIndex + 1]
+                when (sister) {
+                    is ReadAloudInnerNode -> sister.firstLeaf()
+                    is ReadAloudLeafNode -> sister
+                }
+            } else {
+                val next = parent.skipToNext() ?: return null
+                when (next) {
+                    is ReadAloudInnerNode -> next.firstLeaf()
+                    is ReadAloudLeafNode -> next
+                }
+            }
+        }
     }
-
-    val siblings = parent?.children ?: return null
-    val currentIndex = siblings.indexOf(this)
-    check(currentIndex != -1)
-
-    return currentIndex
-        .takeIf { it < siblings.size - 1 }
-        ?.let { siblings[currentIndex + 1].nextLeaf() }
-        ?: parent!!.skipToNext()?.nextLeaf()
-}
 
 @ExperimentalReadiumApi
 internal fun ReadAloudNode.skipToNext(): ReadAloudNode? {

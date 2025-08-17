@@ -72,6 +72,10 @@ public class ExoPlayerEngine private constructor(
             if (events.contains(Player.EVENT_PLAYBACK_STATE_CHANGED) && player.playbackState == Player.STATE_ENDED) {
                 this@ExoPlayerEngine.listener.onPlaybackEnded()
             }
+
+            if (events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION)) {
+                this@ExoPlayerEngine.listener.onItemChanged(player.currentMediaItemIndex)
+            }
         }
     }
 
@@ -102,8 +106,8 @@ public class ExoPlayerEngine private constructor(
         val mediaItems = items.map { item ->
             val clippingConfig = MediaItem.ClippingConfiguration.Builder()
                 .apply {
-                    item.startOffset?.let { setStartPositionMs(it.inWholeMilliseconds) }
-                    item.endOffset?.let { setEndPositionMs(it.inWholeMilliseconds) }
+                    item.interval?.start?.let { setStartPositionMs(it.inWholeMilliseconds) }
+                    item.interval?.end?.let { setEndPositionMs(it.inWholeMilliseconds) }
                 }.build()
             MediaItem.Builder()
                 .setUri(item.href.toString())
