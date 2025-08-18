@@ -40,6 +40,8 @@ public class ReadAloudNavigator private constructor(
 
         public data object Ready : State, MediaNavigator.State.Ready
 
+        public data object Buffering : MediaNavigator.State.Buffering
+
         public data object Ended : State, MediaNavigator.State.Ended
 
         public data class Failure(val error: Error) : State, MediaNavigator.State.Failure
@@ -76,7 +78,8 @@ public class ReadAloudNavigator private constructor(
 
     private val stateMachine = ReadAloudStateMachine(audioEngine)
 
-    private val stateMutable = MutableStateFlow(stateMachine.start(firstLeaf, paused = false))
+    private val stateMutable: MutableStateFlow<ReadAloudStateMachine.State> =
+        MutableStateFlow(stateMachine.start(firstLeaf, paused = false))
 
     private val playbackMutable: MutableStateFlow<Playback> =
         MutableStateFlow(Playback(state = State.Ready, playWhenReady = true))

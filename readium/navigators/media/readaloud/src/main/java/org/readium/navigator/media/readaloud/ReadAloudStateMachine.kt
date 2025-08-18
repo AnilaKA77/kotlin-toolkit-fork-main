@@ -23,8 +23,7 @@ internal sealed interface EngineFood {
 
         companion object {
 
-            fun fromNode(node: ReadAloudNode): AudioEngineFood? {
-                val firstNode = node.firstLeaf() ?: return null
+            fun fromNode(firstNode: ReadAloudLeafNode): AudioEngineFood? {
                 if (!firstNode.refs.any { it is GuidedNavigationAudioRef }) {
                     return null
                 }
@@ -87,7 +86,7 @@ internal class ReadAloudStateMachine(
     }
 
     fun start(initialNode: ReadAloudNode, paused: Boolean): State {
-        val firstLeaf = initialNode.nextLeaf()
+        val firstLeaf = initialNode.firstLeaf()
             ?: return State.Ended
         val engineFood = EngineFood.AudioEngineFood.fromNode(firstLeaf)
             ?: return State.Ended

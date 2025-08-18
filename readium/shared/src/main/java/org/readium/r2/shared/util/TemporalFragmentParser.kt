@@ -13,7 +13,7 @@ import kotlin.time.Duration.Companion.seconds
  * Temporal dimension parser for
  * [Media Fragment specification](https://www.w3.org/TR/media-frags/#naming-time).
  *
- * Supports only Normal Play Time specified as seconds without fractional part at the moment.
+ * Supports only Normal Play Time specified as seconds at the moment.
  */
 public object TemporalFragmentParser {
 
@@ -27,19 +27,14 @@ public object TemporalFragmentParser {
     }
 
     private fun parseNormalPlayTime(value: String): TimeInterval? {
-        val regex = """(\d+)?(,\d+)?""".toRegex()
-        val result = regex.matchEntire(value)
-            ?: return null
+        val components = value.split(",", limit = 2)
 
-        val startOffset = result.groupValues[1]
-            .takeIf { it.isNotEmpty() }
-            ?.toIntOrNull()
+        val startOffset = components.getOrNull(0)
+            ?.toDoubleOrNull()
             ?.seconds
 
-        val endOffset = result.groupValues[2]
-            .removePrefix(",")
-            .takeIf { it.isNotEmpty() }
-            ?.toIntOrNull()
+        val endOffset = components.getOrNull(1)
+            ?.toDoubleOrNull()
             ?.seconds
 
         return TimeInterval(startOffset, endOffset)

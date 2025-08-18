@@ -49,4 +49,12 @@ class TemporalFragmentParserTest {
             TemporalFragmentParser.parse("t=npt:40")
         )
     }
+
+    @Test
+    fun `floating point values are accepted`() {
+        assertEquals(
+            TimeInterval(40.5.seconds, 83.235.seconds),
+            TemporalFragmentParser.parse("t=40.500,83.235")
+        )
+    }
 }
