@@ -17,6 +17,8 @@ public sealed interface ReadAloudNode {
 
     public val roles: Set<GuidedNavigationRole>
 
+    public val refs: Set<GuidedNavigationRef>
+
     public val parent: ReadAloudNode?
 
     public val children: List<ReadAloudNode>
@@ -26,6 +28,7 @@ public sealed interface ReadAloudNode {
 public class ReadAloudInnerNode(
     override val children: List<ReadAloudNode>,
     override val roles: Set<GuidedNavigationRole>,
+    override val refs: Set<GuidedNavigationRef>,
 ) : ReadAloudNode {
 
     override var parent: ReadAloudNode? = null
@@ -35,7 +38,7 @@ public class ReadAloudInnerNode(
 @ExperimentalReadiumApi
 public data class ReadAloudLeafNode(
     val text: GuidedNavigationText?,
-    val refs: Set<GuidedNavigationRef>,
+    override val refs: Set<GuidedNavigationRef>,
     override val roles: Set<GuidedNavigationRole>,
 ) : ReadAloudNode {
 

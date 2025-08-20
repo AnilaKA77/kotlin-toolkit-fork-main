@@ -11,9 +11,7 @@ package org.readium.r2.streamer.parser.epub
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.InternalReadiumApi
 import org.readium.r2.shared.guided.GuidedNavigationAudioRef
-import org.readium.r2.shared.guided.GuidedNavigationContainer
 import org.readium.r2.shared.guided.GuidedNavigationDocument
-import org.readium.r2.shared.guided.GuidedNavigationLeaf
 import org.readium.r2.shared.guided.GuidedNavigationObject
 import org.readium.r2.shared.guided.GuidedNavigationRole
 import org.readium.r2.shared.guided.GuidedNavigationTextRef
@@ -112,7 +110,7 @@ internal object SmilParser {
         node: ElementNode,
         filePath: Url,
         prefixMap: Map<String, String>,
-    ): GuidedNavigationContainer? {
+    ): GuidedNavigationObject? {
         val roles = parseRoles(node, prefixMap)
         val children: MutableList<GuidedNavigationObject> = mutableListOf()
         for (child in node.getAll()) {
@@ -123,7 +121,7 @@ internal object SmilParser {
             }
         }
 
-        return GuidedNavigationContainer(children = children, roles = roles)
+        return GuidedNavigationObject(children = children, roles = roles, refs = emptySet(), text = null)
     }
 
     private fun parsePar(
@@ -156,7 +154,8 @@ internal object SmilParser {
             audio?.let { GuidedNavigationAudioRef(filePath.resolve(it)) }
         )
 
-        return GuidedNavigationLeaf(
+        return GuidedNavigationObject(
+            children = emptyList(),
             text = null,
             refs = refs,
             roles = roles

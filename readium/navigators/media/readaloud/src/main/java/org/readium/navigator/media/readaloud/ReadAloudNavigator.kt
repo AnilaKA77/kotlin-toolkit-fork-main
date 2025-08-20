@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import org.readium.navigator.media.common.MediaNavigator
 import org.readium.r2.shared.ExperimentalReadiumApi
-import org.readium.r2.shared.guided.GuidedNavigationContainer
+import org.readium.r2.shared.guided.GuidedNavigationObject
 import org.readium.r2.shared.util.data.ReadError
 
 @ExperimentalReadiumApi
@@ -20,7 +20,7 @@ public class ReadAloudNavigator private constructor(
     public companion object {
 
         public suspend operator fun invoke(
-            guidedNavigationTree: GuidedNavigationContainer,
+            guidedNavigationTree: GuidedNavigationObject,
             audioEngineFactory: (AudioEngine.Listener) -> AudioEngine,
         ): ReadAloudNavigator {
             val tree = withContext(Dispatchers.Default) {

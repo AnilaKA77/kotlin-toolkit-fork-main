@@ -7,34 +7,42 @@
 package org.readium.navigator.media.readaloud
 
 import org.readium.r2.shared.ExperimentalReadiumApi
-import org.readium.r2.shared.guided.GuidedNavigationContainer
-import org.readium.r2.shared.guided.GuidedNavigationLeaf
 import org.readium.r2.shared.guided.GuidedNavigationObject
 
 @OptIn(ExperimentalReadiumApi::class)
 internal class GuidedNavigationAdapter {
 
-    fun adapt(guidedNavTree: GuidedNavigationContainer): ReadAloudInnerNode {
+    fun adapt(guidedNavTree: GuidedNavigationObject): ReadAloudInnerNode {
         val children = guidedNavTree.children.mapNotNull { adaptNode(it) }
-        val node = ReadAloudInnerNode(children, guidedNavTree.roles)
+        val node = ReadAloudInnerNode(
+            children = children,
+            roles = guidedNavTree.roles,
+            refs = guidedNavTree.refs
+        )
         setParentInChildren(node)
         return node
     }
 
     private fun adaptNode(guidedNavigationObject: GuidedNavigationObject): ReadAloudNode? {
-        return when (guidedNavigationObject) {
-            is GuidedNavigationContainer ->
+        return when (guidedNavigationObject.children.size) {
+            0 ->
+                adaptLeat(guidedNavigationObject)
+            else ->
                 guidedNavigationObject.children
                     .mapNotNull { adaptNode(it) }
                     .takeIf { it.isNotEmpty() }
-                    ?.let { ReadAloudInnerNode(it, guidedNavigationObject.roles) }
+                    ?.let {
+                        ReadAloudInnerNode(
+                            children = it,
+                            roles = guidedNavigationObject.roles,
+                            refs = guidedNavigationObject.refs
+                        )
+                    }
                     ?.also { setParentInChildren(it) }
-            is GuidedNavigationLeaf ->
-                adaptLeat(guidedNavigationObject)
         }
     }
 
-    private fun adaptLeat(guidedNavigationLeaf: GuidedNavigationLeaf): ReadAloudLeafNode? {
+    private fun adaptLeat(guidedNavigationLeaf: GuidedNavigationObject): ReadAloudLeafNode? {
         return ReadAloudLeafNode(
             text = guidedNavigationLeaf.text,
             refs = guidedNavigationLeaf.refs,

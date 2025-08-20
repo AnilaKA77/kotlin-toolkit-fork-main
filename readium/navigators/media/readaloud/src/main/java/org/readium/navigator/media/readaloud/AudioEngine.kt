@@ -8,13 +8,11 @@ package org.readium.navigator.media.readaloud
 
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.publication.Publication
-import org.readium.r2.shared.util.Language
 import org.readium.r2.shared.util.TimeInterval
 import org.readium.r2.shared.util.Url
 
-public sealed interface ReadAloudEngine
-
-public interface AudioEngine : ReadAloudEngine {
+@ExperimentalReadiumApi
+public interface AudioEngine {
 
     public interface Listener {
 
@@ -35,33 +33,11 @@ public interface AudioEngine : ReadAloudEngine {
     public fun resume()
 }
 
+@ExperimentalReadiumApi
 public interface AudioEngineProvider {
 
     public fun createEngine(
         publication: Publication,
         listener: AudioEngine.Listener,
     ): AudioEngine
-}
-
-@ExperimentalReadiumApi
-public interface PlaybackEngine : ReadAloudEngine {
-
-    public fun play(node: ReadAloudLeafNode)
-}
-
-@ExperimentalReadiumApi
-public interface TtsEngine<V : TtsEngine.Voice> : PlaybackEngine {
-
-    public interface Voice {
-
-        /**
-         * The languages supported by the voice.
-         */
-        public val languages: Set<Language>
-    }
-
-    /**
-     * Sets of voices available with this [PlaybackEngine].
-     */
-    public val voices: Set<V>
 }

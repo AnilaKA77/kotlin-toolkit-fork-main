@@ -8,7 +8,7 @@ package org.readium.navigator.media.readaloud
 
 import android.app.Application
 import org.readium.r2.shared.ExperimentalReadiumApi
-import org.readium.r2.shared.guided.GuidedNavigationContainer
+import org.readium.r2.shared.guided.GuidedNavigationObject
 import org.readium.r2.shared.publication.Publication
 import org.readium.r2.shared.publication.services.GuidedNavigationService
 import org.readium.r2.shared.publication.services.guidedNavigationService
@@ -68,11 +68,13 @@ public class ReadAloudNavigatorFactory private constructor(
             }
         }
 
-        val guidedTree = GuidedNavigationContainer(
+        val guidedTree = GuidedNavigationObject(
             children = guidedDocs.map {
-                GuidedNavigationContainer(it.guided, emptySet())
+                GuidedNavigationObject(it.guided, roles = emptySet(), refs = emptySet(), text = null)
             },
-            roles = emptySet()
+            roles = emptySet(),
+            refs = emptySet(),
+            text = null
         )
 
         val navigator = ReadAloudNavigator(

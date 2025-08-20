@@ -14,21 +14,12 @@ public data class GuidedNavigationDocument(
     val links: List<Link>,
     val guided: List<GuidedNavigationObject>,
 )
-
-public sealed interface GuidedNavigationObject {
-    public val roles: Set<GuidedNavigationRole>
-}
-
-public data class GuidedNavigationLeaf(
-    val text: GuidedNavigationText?,
-    val refs: Set<GuidedNavigationRef>,
-    override val roles: Set<GuidedNavigationRole>,
-) : GuidedNavigationObject
-
-public data class GuidedNavigationContainer(
+public data class GuidedNavigationObject(
     val children: List<GuidedNavigationObject>,
-    override val roles: Set<GuidedNavigationRole>,
-) : GuidedNavigationObject
+    val roles: Set<GuidedNavigationRole>,
+    val refs: Set<GuidedNavigationRef>,
+    val text: GuidedNavigationText?,
+)
 
 @JvmInline
 public value class SsmlString(public val value: String)
@@ -46,16 +37,18 @@ public data class GuidedNavigationText private constructor(
     }
 }
 
-public sealed interface GuidedNavigationRef
+public sealed interface GuidedNavigationRef {
+    public val url: Url
+}
 
 public data class GuidedNavigationTextRef(
-    val url: Url,
+    override val url: Url,
 ) : GuidedNavigationRef
 
 public data class GuidedNavigationImageRef(
-    val url: Url,
+    override val url: Url,
 ) : GuidedNavigationRef
 
 public data class GuidedNavigationAudioRef(
-    val url: Url,
+    override val url: Url,
 ) : GuidedNavigationRef
