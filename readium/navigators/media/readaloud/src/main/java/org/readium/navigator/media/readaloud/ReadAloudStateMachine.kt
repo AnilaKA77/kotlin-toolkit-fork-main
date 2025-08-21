@@ -62,79 +62,116 @@ internal sealed interface EngineFood {
                 ?.let { TemporalFragmentParser.parse(it) }
         }
     }
+
+    data class TtsFood(
+        val nodes: List<ReadAloudLeafNode>,
+    ) {
+
+        companion object {
+
+            fun fromNode(firstNode: ReadAloudLeafNode): TtsFood? {
+                return null
+            }
+        }
+    }
 }
 
 internal class ReadAloudStateMachine(
     private val audioEngine: AudioEngine,
 ) {
-    sealed interface State {
 
-        data class Playing(
-            val paused: Boolean,
-            val node: ReadAloudLeafNode,
-            val engineFood: EngineFood,
-        ) : State
+    sealed interface PlaybackState {
 
-        data object Ended : State
+        data object Ready : PlaybackState
 
-        data class Failure(val error: Error) : State
+        data object Starved : PlaybackState
+
+        data object Ended : PlaybackState
+
+        data class Failure(val error: Error) : PlaybackState
     }
+
+    data class State(
+        val playbackState: PlaybackState,
+        val playWhenReady: Boolean,
+        val node: ReadAloudLeafNode,
+        val engineFood: EngineFood,
+    )
 
     sealed interface Event {
 
-        data object AudioEngineEnded : Event
+        data class AudioEngineStateChanged(val state: AudioEngine.State) : Event
+
+        data class AudioEngineItemChanged(val index: Int) : Event
     }
 
-    fun start(initialNode: ReadAloudNode, paused: Boolean): State {
-        val firstLeaf = initialNode.firstLeaf()
-            ?: return State.Ended
+    fun play(engineFood: EngineFood, playWhenReady: Boolean): State {
+        when (engineFood) {
+            is EngineFood.AudioEngineFood -> {
+                audioEngine.playWhenReady = !playWhenReady
+                audioEngine.setPlaylist(engineFood.items)
+            }
+        }
+
+        return State(
+            playbackState = PlaybackState.Starved,
+            playWhenReady = playWhenReady,
+            node = engineFood.nodes[0],
+            engineFood = engineFood,
+        )
+    }
+
+    fun State.pause(): State {
+        audioEngine.playWhenReady = false
+        return copy(playWhenReady = true)
+    }
+
+    fun State.resume(): State {
+        audioEngine.playWhenReady = true
+        return copy(playWhenReady = false)
+    }
+
+    fun State.jump(node: ReadAloudNode): State {
+        val firstLeaf = node.firstLeaf()
+            ?: return copy(playbackState = PlaybackState.Ended)
+
         val engineFood = EngineFood.AudioEngineFood.fromNode(firstLeaf)
-            ?: return State.Ended
+            ?: return copy(playbackState = PlaybackState.Ended)
 
-        if (paused) audioEngine.pause() else audioEngine.resume()
-        audioEngine.setPlaylist(engineFood.items)
-        return State.Playing(paused = paused, node = firstLeaf, engineFood = engineFood)
+        return play(engineFood, !playWhenReady)
     }
-
-    fun State.pause(): State =
-        when (this) {
-            State.Ended -> this
-            is State.Failure -> this
-            is State.Playing -> {
-                if (engineFood is EngineFood.AudioEngineFood) {
-                    audioEngine.pause()
-                }
-                copy(paused = true)
-            }
-        }
-
-    fun State.resume(): State =
-        when (this) {
-            State.Ended -> this
-            is State.Failure -> this
-            is State.Playing -> {
-                if (engineFood is EngineFood.AudioEngineFood) {
-                    audioEngine.resume()
-                }
-                copy(paused = false)
-            }
-        }
-
-    fun State.jump(node: ReadAloudNode): State =
-        when (this) {
-            State.Ended -> start(node, paused = true)
-            is State.Failure -> this
-            is State.Playing -> start(node, paused = paused)
-        }
 
     fun State.onEvent(event: Event): State = when (event) {
-        Event.AudioEngineEnded -> onAudioEngineEnded()
+        is Event.AudioEngineStateChanged -> onAudioEngineStateChanged(event.state)
+        is Event.AudioEngineItemChanged -> onAudioEngineItemChanged(event.index)
     }
 
-    fun State.onAudioEngineEnded(): State =
-        when (this) {
-            State.Ended -> this
-            is State.Failure -> this
-            is State.Playing -> State.Ended
+    fun State.onAudioEngineStateChanged(audioEngineState: AudioEngine.State): State =
+        when (audioEngineState) {
+            AudioEngine.State.Ready -> copy(playbackState = PlaybackState.Ready)
+            AudioEngine.State.Starved -> copy(playbackState = PlaybackState.Starved)
+            AudioEngine.State.Ended -> onAudioEngineEnded()
         }
+
+    private fun State.onAudioEngineEnded(): State {
+        var nextNode: ReadAloudLeafNode? = node
+        var nextFood: EngineFood?
+
+        do {
+            nextNode = nextNode?.nextLeaf()
+            nextFood = nextNode?.let { EngineFood.AudioEngineFood.fromNode(it) }
+        } while (nextFood == null && nextNode != null)
+
+        return if (nextNode == null) {
+            copy(playbackState = PlaybackState.Ended)
+        } else {
+            nextFood!!
+            audioEngine.setPlaylist(nextFood.items)
+            copy(engineFood = nextFood, playbackState = PlaybackState.Starved, node = nextFood.nodes[0])
+        }
+    }
+
+    fun State.onAudioEngineItemChanged(item: Int): State {
+        return copy(node = (engineFood as EngineFood.AudioEngineFood).nodes[item])
+    }
 }

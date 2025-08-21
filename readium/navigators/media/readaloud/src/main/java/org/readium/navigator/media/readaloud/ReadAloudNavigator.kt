@@ -1,13 +1,17 @@
+@file:OptIn(InternalReadiumApi::class)
 
 package org.readium.navigator.media.readaloud
 
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import org.readium.navigator.media.common.MediaNavigator
 import org.readium.r2.shared.ExperimentalReadiumApi
+import org.readium.r2.shared.InternalReadiumApi
+import org.readium.r2.shared.extensions.mapStateIn
 import org.readium.r2.shared.guided.GuidedNavigationObject
 import org.readium.r2.shared.util.data.ReadError
 
@@ -34,13 +38,14 @@ public class ReadAloudNavigator private constructor(
     public data class Playback(
         val state: State,
         val playWhenReady: Boolean,
+        val node: ReadAloudLeafNode,
     )
 
     public sealed interface State {
 
         public data object Ready : State, MediaNavigator.State.Ready
 
-        public data object Buffering : MediaNavigator.State.Buffering
+        public data object Buffering : State, MediaNavigator.State.Buffering
 
         public data object Ended : State, MediaNavigator.State.Ended
 
@@ -62,14 +67,14 @@ public class ReadAloudNavigator private constructor(
     private inner class AudioEngineListener : AudioEngine.Listener {
 
         override fun onItemChanged(index: Int) {
-            val state = stateMutable.value as ReadAloudStateMachine.State.Playing
-            val engineFood = state.engineFood as EngineFood.AudioEngineFood
-            nodeMutable.value = engineFood.nodes[index]
+            with(stateMachine) {
+                stateMutable.value = stateMutable.value.onAudioEngineItemChanged(index)
+            }
         }
 
-        override fun onPlaybackEnded() {
+        override fun onStateChanged(state: AudioEngine.State) {
             with(stateMachine) {
-                stateMutable.value = stateMutable.value.onAudioEngineEnded()
+                stateMutable.value = stateMutable.value.onAudioEngineStateChanged(state)
             }
         }
     }
@@ -78,20 +83,34 @@ public class ReadAloudNavigator private constructor(
 
     private val stateMachine = ReadAloudStateMachine(audioEngine)
 
-    private val stateMutable: MutableStateFlow<ReadAloudStateMachine.State> =
-        MutableStateFlow(stateMachine.start(firstLeaf, paused = false))
+    private val stateMutable: MutableStateFlow<ReadAloudStateMachine.State> = run {
+        val engineFood = EngineFood.AudioEngineFood.fromNode(firstLeaf)!!
+        MutableStateFlow(stateMachine.play(engineFood, playWhenReady = true))
+    }
 
-    private val playbackMutable: MutableStateFlow<Playback> =
-        MutableStateFlow(Playback(state = State.Ready, playWhenReady = true))
-
-    private val nodeMutable: MutableStateFlow<ReadAloudNode> =
-        MutableStateFlow(firstLeaf)
+    private val coroutineScope: CoroutineScope =
+        MainScope()
 
     public val playback: StateFlow<Playback> =
-        playbackMutable.asStateFlow()
+        stateMutable.mapStateIn(coroutineScope) { state ->
+            Playback(
+                playWhenReady = state.playWhenReady,
+                state = state.playbackState.toState(),
+                node = state.node
+            )
+        }
 
-    public val node: StateFlow<ReadAloudNode> =
-        nodeMutable.asStateFlow()
+    private fun ReadAloudStateMachine.PlaybackState.toState(): State =
+        when (this) {
+            is ReadAloudStateMachine.PlaybackState.Ready ->
+                State.Ready
+            is ReadAloudStateMachine.PlaybackState.Starved ->
+                State.Buffering
+            is ReadAloudStateMachine.PlaybackState.Ended ->
+                State.Ended
+            is ReadAloudStateMachine.PlaybackState.Failure ->
+                State.Failure(Error.EngineError(error))
+        }
 
     public fun play() {
         with(stateMachine) {
@@ -112,18 +131,18 @@ public class ReadAloudNavigator private constructor(
     }
 
     public fun canEscape(): Boolean =
-        nodeMutable.value.isEscapable()
+        stateMutable.value.node.isEscapable()
 
     public fun canSkip(): Boolean =
-        nodeMutable.value.isSkippable()
+        stateMutable.value.node.isSkippable()
 
     public fun escape(force: Boolean = true) {
-        nodeMutable.value.escape(force)
+        stateMutable.value.node.escape(force)
             ?.let { go(it) }
     }
 
     public fun skip(force: Boolean = true) {
-        nodeMutable.value.skip(force)
+        stateMutable.value.node.skip(force)
             ?.let { go(it) }
     }
 }

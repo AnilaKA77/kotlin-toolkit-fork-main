@@ -18,7 +18,13 @@ public interface AudioEngine {
 
         public fun onItemChanged(index: Int)
 
-        public fun onPlaybackEnded()
+        public fun onStateChanged(state: State)
+    }
+
+    public enum class State {
+        Ready,
+        Starved,
+        Ended,
     }
 
     public data class Item(
@@ -26,11 +32,9 @@ public interface AudioEngine {
         val interval: TimeInterval?,
     )
 
+    public var playWhenReady: Boolean
+
     public fun setPlaylist(items: List<Item>)
-
-    public fun pause()
-
-    public fun resume()
 }
 
 @ExperimentalReadiumApi

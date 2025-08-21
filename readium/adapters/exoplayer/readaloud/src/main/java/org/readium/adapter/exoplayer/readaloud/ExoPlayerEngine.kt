@@ -69,8 +69,14 @@ public class ExoPlayerEngine private constructor(
         }
 
         override fun onEvents(player: Player, events: Player.Events) {
-            if (events.contains(Player.EVENT_PLAYBACK_STATE_CHANGED) && player.playbackState == Player.STATE_ENDED) {
-                this@ExoPlayerEngine.listener.onPlaybackEnded()
+            if (events.contains(Player.EVENT_PLAYBACK_STATE_CHANGED)) {
+                val newState = when (player.playbackState) {
+                    Player.STATE_READY -> AudioEngine.State.Ready
+                    Player.STATE_BUFFERING -> AudioEngine.State.Starved
+                    Player.STATE_ENDED -> AudioEngine.State.Ended
+                    else -> null
+                }
+                newState?.let { this@ExoPlayerEngine.listener.onStateChanged(it) }
             }
 
             if (events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION)) {
@@ -122,13 +128,11 @@ public class ExoPlayerEngine private constructor(
         }
     }
 
-    override fun resume() {
-        exoPlayer.play()
-    }
-
-    override fun pause() {
-        exoPlayer.pause()
-    }
+    override var playWhenReady: Boolean
+        get() = exoPlayer.playWhenReady
+        set(value) {
+            exoPlayer.playWhenReady = value
+        }
 
     public fun close() {
         coroutineScope.cancel()
