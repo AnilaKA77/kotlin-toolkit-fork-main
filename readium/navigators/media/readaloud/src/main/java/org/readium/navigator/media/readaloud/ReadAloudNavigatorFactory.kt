@@ -19,6 +19,7 @@ import org.readium.r2.shared.util.getOrElse
 @ExperimentalReadiumApi
 public class ReadAloudNavigatorFactory private constructor(
     private val guidedNavigationService: GuidedNavigationService,
+    private val resources: List<ReadAloudPublication.Item>,
     private val audioEngineFactory: (AudioEngine.Listener) -> AudioEngine,
 ) {
 
@@ -36,8 +37,16 @@ public class ReadAloudNavigatorFactory private constructor(
                 audioEngineProvider.createEngine(publication, listener)
             }
 
+            val resources = (publication.readingOrder + publication.resources).map {
+                ReadAloudPublication.Item(
+                    href = it.url(),
+                    mediaType = it.mediaType
+                )
+            }
+
             return ReadAloudNavigatorFactory(
                 guidedNavigationService = guidedNavService,
+                resources = resources,
                 audioEngineFactory = audioEngineFactory
             )
         }
@@ -57,7 +66,9 @@ public class ReadAloudNavigatorFactory private constructor(
         ) : Error("Failed to acquire guided navigation documents.", cause)
     }
 
-    public suspend fun createNavigator(): Try<ReadAloudNavigator, Error> {
+    public suspend fun createNavigator(
+        initialLocation: ReadAloudGoLocation? = null,
+    ): Try<ReadAloudNavigator, Error> {
         val guidedDocs = buildList {
             val iterator = guidedNavigationService.iterator()
             while (iterator.hasNext()) {
@@ -77,8 +88,14 @@ public class ReadAloudNavigatorFactory private constructor(
             text = null
         )
 
-        val navigator = ReadAloudNavigator(
+        val navigatorPublication = ReadAloudPublication(
             guidedNavigationTree = guidedTree,
+            resources = resources,
+        )
+
+        val navigator = ReadAloudNavigator(
+            initialLocation = initialLocation,
+            publication = navigatorPublication,
             audioEngineFactory = audioEngineFactory
         )
 

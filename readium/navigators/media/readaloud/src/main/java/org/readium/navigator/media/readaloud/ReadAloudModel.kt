@@ -50,6 +50,22 @@ public data class ReadAloudLeafNode(
 }
 
 @ExperimentalReadiumApi
+internal fun ReadAloudNode.firstMatchingLocation(location: ReadAloudGoLocation): ReadAloudLeafNode? =
+    firstDescendantOrNull {
+        when (it) {
+            is ReadAloudInnerNode -> false
+            is ReadAloudLeafNode -> it.matchLocation(location)
+        }
+    } as? ReadAloudLeafNode
+
+@ExperimentalReadiumApi
+private fun ReadAloudLeafNode.matchLocation(location: ReadAloudGoLocation): Boolean =
+    refs.any { ref ->
+        ref.url.removeFragment() == location.href &&
+            ref.url.fragment == location.cssSelector?.value?.removePrefix("#")
+    }
+
+@ExperimentalReadiumApi
 internal fun ReadAloudNode.isSkippable(): Boolean =
     nearestSkippable() != null
 
@@ -116,8 +132,12 @@ internal fun ReadAloudNode.escape(force: Boolean): ReadAloudNode? =
     (nearestEscapable() ?: this.takeIf { force })?.skipToNext()
 
 @ExperimentalReadiumApi
-internal fun ReadAloudNode.skip(force: Boolean): ReadAloudNode? =
+internal fun ReadAloudNode.skipToNext(force: Boolean): ReadAloudNode? =
     (nearestSkippable() ?: this.takeIf { force })?.skipToNext()
+
+@ExperimentalReadiumApi
+internal fun ReadAloudNode.skipToPrevious(force: Boolean): ReadAloudNode? =
+    (nearestSkippable() ?: this.takeIf { force })?.skipToPrevious()
 
 @ExperimentalReadiumApi
 private fun ReadAloudNode.nearestEscapable(): ReadAloudNode? =
@@ -135,4 +155,14 @@ private fun ReadAloudNode.nearestOrNull(
         predicate(this) -> this
         parent == null -> null
         else -> parent!!.nearestOrNull(predicate)
+    }
+
+@ExperimentalReadiumApi
+private fun ReadAloudNode.firstDescendantOrNull(
+    predicate: (ReadAloudNode) -> Boolean,
+): ReadAloudNode? =
+    when {
+        predicate(this) -> this
+        children.isEmpty() -> null
+        else -> children.firstNotNullOfOrNull { it.firstDescendantOrNull(predicate) }
     }

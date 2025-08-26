@@ -38,6 +38,15 @@ public interface TextQuoteLocation : Location {
 }
 
 /**
+ * A [Location] including a [TextAnchor].
+ */
+@ExperimentalReadiumApi
+public interface TextAnchorLocation : Location {
+
+    public val textAnchor: TextAnchor
+}
+
+/**
  * A [Location] including a [CssSelector].
  */
 @ExperimentalReadiumApi

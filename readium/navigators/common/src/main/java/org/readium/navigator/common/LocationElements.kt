@@ -60,3 +60,9 @@ public data class TextQuote(
     val prefix: String,
     val suffix: String,
 )
+
+@ExperimentalReadiumApi
+public data class TextAnchor(
+    val prefix: String,
+    val suffix: String,
+)

@@ -14,6 +14,7 @@ android {
 }
 
 dependencies {
+    api(project(":readium:navigators:readium-navigator-common"))
     api(project(":readium:navigators:media:readium-navigator-media-common"))
 
     implementation(libs.androidx.media3.common)

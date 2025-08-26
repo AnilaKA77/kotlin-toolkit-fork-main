@@ -108,7 +108,7 @@ internal class ReadAloudStateMachine(
     fun play(engineFood: EngineFood, playWhenReady: Boolean): State {
         when (engineFood) {
             is EngineFood.AudioEngineFood -> {
-                audioEngine.playWhenReady = !playWhenReady
+                audioEngine.playWhenReady = playWhenReady
                 audioEngine.setPlaylist(engineFood.items)
             }
         }
@@ -123,12 +123,12 @@ internal class ReadAloudStateMachine(
 
     fun State.pause(): State {
         audioEngine.playWhenReady = false
-        return copy(playWhenReady = true)
+        return copy(playWhenReady = false)
     }
 
     fun State.resume(): State {
         audioEngine.playWhenReady = true
-        return copy(playWhenReady = false)
+        return copy(playWhenReady = true)
     }
 
     fun State.jump(node: ReadAloudNode): State {
@@ -138,7 +138,7 @@ internal class ReadAloudStateMachine(
         val engineFood = EngineFood.AudioEngineFood.fromNode(firstLeaf)
             ?: return copy(playbackState = PlaybackState.Ended)
 
-        return play(engineFood, !playWhenReady)
+        return play(engineFood, playWhenReady)
     }
 
     fun State.onEvent(event: Event): State = when (event) {
