@@ -27,6 +27,7 @@ import org.readium.navigator.common.PreferencesEditor
 import org.readium.navigator.common.Settings
 import org.readium.navigator.common.SettingsController
 import org.readium.navigator.media.readaloud.ReadAloudNavigatorFactory
+import org.readium.navigator.media.readaloud.ReadAloudSettings
 import org.readium.navigator.web.fixedlayout.FixedWebGoLocation
 import org.readium.navigator.web.fixedlayout.FixedWebLocation
 import org.readium.navigator.web.fixedlayout.FixedWebRenditionController
@@ -40,10 +41,12 @@ import org.readium.navigator.web.reflowable.ReflowableWebRenditionFactory
 import org.readium.navigator.web.reflowable.ReflowableWebSelectionLocation
 import org.readium.navigator.web.reflowable.preferences.ReflowableWebPreferences
 import org.readium.r2.shared.ExperimentalReadiumApi
+import org.readium.r2.shared.guided.GuidedNavigationRole
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
 import org.readium.r2.shared.util.AbsoluteUrl
 import org.readium.r2.shared.util.Error
+import org.readium.r2.shared.util.Language
 import org.readium.r2.shared.util.Try
 import org.readium.r2.shared.util.getOrElse
 
@@ -197,7 +200,18 @@ class ReaderOpener(
         navigatorFactory: ReadAloudNavigatorFactory,
         initialLocator: Locator?,
     ): Try<ReadAloudReaderState, Error> {
-        val navigator = navigatorFactory.createNavigator()
+        val initialSettings = ReadAloudSettings(
+            language = Language("en"),
+            overrideContentLanguage = true,
+            preferRecordedVoices = true,
+            pitch = 1.0,
+            speed = 1.0,
+            voices = emptyMap(),
+            escapableRoles = GuidedNavigationRole.ESCAPABLE_ROLES.toSet(),
+            skippableRoles = GuidedNavigationRole.SKIPPABLE_ROLES.toSet()
+        )
+
+        val navigator = navigatorFactory.createNavigator(initialSettings)
             .getOrElse { return Try.failure(it) }
 
         val readerState = ReadAloudReaderState(

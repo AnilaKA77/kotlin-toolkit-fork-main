@@ -1,10 +1,10 @@
 /*
- * Copyright 2022 Readium Foundation. All rights reserved.
+ * Copyright 2025 Readium Foundation. All rights reserved.
  * Use of this source code is governed by the BSD-style license
  * available in the top-level LICENSE file of the project.
  */
 
-@file:OptIn(InternalReadiumApi::class)
+@file:OptIn(InternalReadiumApi::class, ExperimentalReadiumApi::class)
 
 package org.readium.r2.streamer.parser.epub
 
@@ -16,8 +16,8 @@ import org.readium.r2.shared.guided.GuidedNavigationObject
 import org.readium.r2.shared.guided.GuidedNavigationRole
 import org.readium.r2.shared.guided.GuidedNavigationTextRef
 import org.readium.r2.shared.publication.Publication
+import org.readium.r2.shared.publication.epub.MediaOverlaysService
 import org.readium.r2.shared.publication.services.GuidedNavigationIterator
-import org.readium.r2.shared.publication.services.GuidedNavigationService
 import org.readium.r2.shared.util.Try
 import org.readium.r2.shared.util.Url
 import org.readium.r2.shared.util.data.Container
@@ -29,34 +29,36 @@ import org.readium.r2.shared.util.resource.Resource
 import org.readium.r2.shared.util.use
 import org.readium.r2.shared.util.xml.ElementNode
 
+/**
+ * A GuidedNavigationService producing guided navigation documents from media overlays SMIL files.
+ */
 @ExperimentalReadiumApi
-public class MediaOverlaysService(
-    private val smils: List<Url>,
+public class SmilBasedMediaOverlaysService(
+    private val smilFiles: List<Url>,
     private val container: Container<Resource>,
-) : GuidedNavigationService {
+) : MediaOverlaysService {
 
     override fun iterator(): GuidedNavigationIterator {
-        return MediaOverlaysIterator(smils, container)
+        return MediaOverlaysIterator(smilFiles, container)
     }
 
     public companion object {
 
         public fun createFactory(
-            smils: List<Url>,
+            smilFiles: List<Url>,
         ): (
             Publication.Service.Context,
-        ) -> MediaOverlaysService =
+        ) -> SmilBasedMediaOverlaysService =
             { context ->
-                MediaOverlaysService(
-                    smils = smils,
+                SmilBasedMediaOverlaysService(
+                    smilFiles = smilFiles,
                     container = context.container
                 )
             }
     }
 }
 
-@OptIn(ExperimentalReadiumApi::class)
-internal class MediaOverlaysIterator(
+private class MediaOverlaysIterator(
     private val smils: List<Url>,
     private val container: Container<Resource>,
 ) : GuidedNavigationIterator {
@@ -190,6 +192,44 @@ internal object SmilParser {
                 "table-row" -> GuidedNavigationRole.ROW
                 "table" -> GuidedNavigationRole.TABLE
                 "glossterm" -> GuidedNavigationRole.TERM
+
+                "abstract" -> GuidedNavigationRole.ABSTRACT
+                "acknowledgments" -> GuidedNavigationRole.ACKNOWLEDGMENTS
+                "afterword" -> GuidedNavigationRole.AFTERWORD
+                "appendix" -> GuidedNavigationRole.APPENDIX
+                "backlink" -> GuidedNavigationRole.BACKLINK
+                "bibliography" -> GuidedNavigationRole.BIBLIOGRAPHY
+                "biblioref" -> GuidedNavigationRole.BIBLIOREF
+                "chapter" -> GuidedNavigationRole.CHAPTER
+                "colophon" -> GuidedNavigationRole.COLOPHON
+                "conclusion" -> GuidedNavigationRole.CONCLUSION
+                "cover" -> GuidedNavigationRole.COVER
+                "credit" -> GuidedNavigationRole.CREDIT
+                "credits" -> GuidedNavigationRole.CREDITS
+                "dedication" -> GuidedNavigationRole.DEDICATION
+                "endnotes" -> GuidedNavigationRole.ENDNOTES
+                "epigraph" -> GuidedNavigationRole.EPIGRAPH
+                "epilogue" -> GuidedNavigationRole.EPILOGUE
+                "errata" -> GuidedNavigationRole.ERRATA
+                "example" -> GuidedNavigationRole.EXAMPLE
+                "footnote" -> GuidedNavigationRole.FOOTNOTE
+                "glossary" -> GuidedNavigationRole.GLOSSARY
+                "glossref" -> GuidedNavigationRole.GLOSSREF
+                "index" -> GuidedNavigationRole.INDEX
+                "introduction" -> GuidedNavigationRole.INTRODUCTION
+                "noteref" -> GuidedNavigationRole.NOTEREF
+                "notice" -> GuidedNavigationRole.NOTICE
+                "pagebreak" -> GuidedNavigationRole.PAGEBREAK
+                "page-list" -> GuidedNavigationRole.PAGELIST
+                "part" -> GuidedNavigationRole.PART
+                "preface" -> GuidedNavigationRole.PREFACE
+                "prologue" -> GuidedNavigationRole.PROLOGUE
+                "pullquote" -> GuidedNavigationRole.PULLQUOTE
+                "qna" -> GuidedNavigationRole.QNA
+                "subtitle" -> GuidedNavigationRole.SUBTITLE
+                "tip" -> GuidedNavigationRole.TIP
+                "toc" -> GuidedNavigationRole.TOC
+
                 "landmarks" -> GuidedNavigationRole.LANDMARKS
                 "loa" -> GuidedNavigationRole.LOA
                 "loi" -> GuidedNavigationRole.LOI

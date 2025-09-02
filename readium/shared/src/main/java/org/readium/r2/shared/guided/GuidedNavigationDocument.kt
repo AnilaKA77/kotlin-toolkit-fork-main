@@ -6,14 +6,24 @@
 
 package org.readium.r2.shared.guided
 
+import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.util.Language
 import org.readium.r2.shared.util.Url
 
+/**
+ * A guided navigation document.
+ */
+@ExperimentalReadiumApi
 public data class GuidedNavigationDocument(
     val links: List<Link>,
     val guided: List<GuidedNavigationObject>,
 )
+
+/**
+ * A guided navigation object.
+ */
+@ExperimentalReadiumApi
 public data class GuidedNavigationObject(
     val children: List<GuidedNavigationObject>,
     val roles: Set<GuidedNavigationRole>,
@@ -21,9 +31,17 @@ public data class GuidedNavigationObject(
     val text: GuidedNavigationText?,
 )
 
+/**
+ * A string containing some SSML markup.
+ */
+@ExperimentalReadiumApi
 @JvmInline
 public value class SsmlString(public val value: String)
 
+/**
+ * Text holder for a guided navigation object.
+ */
+@ExperimentalReadiumApi
 @ConsistentCopyVisibility
 public data class GuidedNavigationText private constructor(
     val plain: String?,
@@ -37,18 +55,34 @@ public data class GuidedNavigationText private constructor(
     }
 }
 
+/**
+ * A reference to external content.
+ */
+@ExperimentalReadiumApi
 public sealed interface GuidedNavigationRef {
     public val url: Url
 }
 
+/**
+ * A reference to external text content.
+ */
+@ExperimentalReadiumApi
 public data class GuidedNavigationTextRef(
     override val url: Url,
 ) : GuidedNavigationRef
 
+/**
+ * A reference to external image content.
+ */
+@ExperimentalReadiumApi
 public data class GuidedNavigationImageRef(
     override val url: Url,
 ) : GuidedNavigationRef
 
+/**
+ * A reference to external audio content.
+ */
+@ExperimentalReadiumApi
 public data class GuidedNavigationAudioRef(
     override val url: Url,
 ) : GuidedNavigationRef

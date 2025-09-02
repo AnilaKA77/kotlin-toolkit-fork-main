@@ -14,17 +14,23 @@ import org.readium.r2.shared.util.Closeable
 import org.readium.r2.shared.util.Try
 import org.readium.r2.shared.util.data.ReadError
 
+/**
+ * Provides a list of Guided Navigation documents for a Publication.
+ */
 @ExperimentalReadiumApi
 public interface GuidedNavigationService : Publication.Service {
 
     public fun iterator(): GuidedNavigationIterator
 }
 
+/**
+ * Iterator providing access to all guided navigation documents of a Publication.
+ */
 @ExperimentalReadiumApi
 public interface GuidedNavigationIterator : Closeable {
 
     /**
-     * Prepares an element for retrieval by the invocation of next.
+     * Prepares the next guided navigation document for retrieval by the invocation of next.
      *
      * Does nothing if the the end has been reached.
      */
@@ -42,8 +48,15 @@ public interface GuidedNavigationIterator : Closeable {
     override fun close() {}
 }
 
+/**
+ * Returns an iterator providing access to all the guided navigation documents of the publication.
+ */
 @ExperimentalReadiumApi
-public val PublicationServicesHolder.guidedNavigationService: GuidedNavigationService?
+public fun Publication.guidedNavigationIterator(): GuidedNavigationIterator? =
+    guidedNavigationService?.iterator()
+
+@OptIn(ExperimentalReadiumApi::class)
+private val PublicationServicesHolder.guidedNavigationService: GuidedNavigationService?
     get() {
         findService(GuidedNavigationService::class)?.let { return it }
         return null

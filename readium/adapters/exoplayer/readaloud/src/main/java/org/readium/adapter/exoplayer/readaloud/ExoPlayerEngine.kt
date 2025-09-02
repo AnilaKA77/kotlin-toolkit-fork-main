@@ -59,6 +59,8 @@ public class ExoPlayerEngine private constructor(
                 .setHandleAudioBecomingNoisy(true)
                 .build()
 
+            exoPlayer.preloadConfiguration = ExoPlayer.PreloadConfiguration(10_000_000L)
+
             return ExoPlayerEngine(exoPlayer, listener)
         }
     }
@@ -76,11 +78,11 @@ public class ExoPlayerEngine private constructor(
                     Player.STATE_ENDED -> AudioEngine.State.Ended
                     else -> null
                 }
-                newState?.let { this@ExoPlayerEngine.listener.onStateChanged(it) }
+                newState?.let { this@ExoPlayerEngine.listener.onStateChanged(this@ExoPlayerEngine, it) }
             }
 
             if (events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION)) {
-                this@ExoPlayerEngine.listener.onItemChanged(player.currentMediaItemIndex)
+                this@ExoPlayerEngine.listener.onItemChanged(this@ExoPlayerEngine, player.currentMediaItemIndex)
             }
         }
     }
@@ -126,6 +128,10 @@ public class ExoPlayerEngine private constructor(
             exoPlayer.prepare()
             prepareCalled = true
         }
+    }
+
+    override fun seekTo(index: Int) {
+        exoPlayer.seekTo(index, 0L)
     }
 
     override var playWhenReady: Boolean

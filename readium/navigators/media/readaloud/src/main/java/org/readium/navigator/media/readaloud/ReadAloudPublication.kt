@@ -4,8 +4,11 @@
  * available in the top-level LICENSE file of the project.
  */
 
+@file:OptIn(ExperimentalReadiumApi::class)
+
 package org.readium.navigator.media.readaloud
 
+import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.guided.GuidedNavigationObject
 import org.readium.r2.shared.util.Url
 import org.readium.r2.shared.util.mediatype.MediaType

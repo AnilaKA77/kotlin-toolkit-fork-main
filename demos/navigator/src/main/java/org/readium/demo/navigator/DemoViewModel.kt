@@ -23,6 +23,7 @@ import org.readium.demo.navigator.reader.SelectNavigatorItem
 import org.readium.demo.navigator.reader.SelectNavigatorViewModel
 import org.readium.demo.navigator.reader.fixedConfig
 import org.readium.demo.navigator.reader.reflowableConfig
+import org.readium.navigator.media.readaloud.NullTtsEngineProvider
 import org.readium.navigator.media.readaloud.ReadAloudNavigatorFactory
 import org.readium.navigator.web.fixedlayout.FixedWebRenditionFactory
 import org.readium.navigator.web.reflowable.ReflowableWebRenditionFactory
@@ -127,7 +128,8 @@ class DemoViewModel(
                 ReadAloudNavigatorFactory(
                     application = application,
                     publication = publication,
-                    audioEngineProvider = audioEngineProvider
+                    audioEngineProvider = audioEngineProvider,
+                    ttsEngineProvider = NullTtsEngineProvider
                 )?.let { SelectNavigatorItem.ReadAloud(it) }
 
             val factories = listOfNotNull(

@@ -1,7 +1,14 @@
+/*
+ * Copyright 2025 Readium Foundation. All rights reserved.
+ * Use of this source code is governed by the BSD-style license
+ * available in the top-level LICENSE file of the project.
+ */
+
 @file:OptIn(InternalReadiumApi::class)
 
 package org.readium.navigator.media.readaloud
 
+import kotlin.properties.Delegates
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.MainScope
@@ -20,32 +27,33 @@ import org.readium.r2.shared.util.data.ReadError
 
 @ExperimentalReadiumApi
 public class ReadAloudNavigator private constructor(
-    firstLeaf: ReadAloudLeafNode,
-    private val guidedNavigationTree: ReadAloudInnerNode,
+    private val guidedNavigationTree: ReadAloudNode,
     private val resources: List<ReadAloudPublication.Item>,
     audioEngineFactory: (AudioEngine.Listener) -> AudioEngine,
+    ttsEngineFactory: () -> TtsEngine,
+    initialSettings: ReadAloudSettings,
+    initialLocation: ReadAloudGoLocation?,
 ) {
     public companion object {
 
         internal suspend operator fun invoke(
             initialLocation: ReadAloudGoLocation?,
+            initialSettings: ReadAloudSettings,
             publication: ReadAloudPublication,
             audioEngineFactory: (AudioEngine.Listener) -> AudioEngine,
+            ttsEngineFactory: () -> TtsEngine,
         ): ReadAloudNavigator {
             val tree = withContext(Dispatchers.Default) {
-                GuidedNavigationAdapter().adapt(publication.guidedNavigationTree)
+                ReadAloudNode.fromGuidedNavigationObject(publication.guidedNavigationTree)
             }
-            val initialLeaf = initialLocation
-                ?.let { tree.firstMatchingLocation(it) }
-                ?: tree.firstLeaf()
-
-            checkNotNull(initialLeaf)
 
             return ReadAloudNavigator(
-                firstLeaf = initialLeaf,
                 guidedNavigationTree = tree,
                 resources = publication.resources,
-                audioEngineFactory = audioEngineFactory
+                audioEngineFactory = audioEngineFactory,
+                ttsEngineFactory = ttsEngineFactory,
+                initialSettings = initialSettings,
+                initialLocation = initialLocation
             )
         }
     }
@@ -53,7 +61,7 @@ public class ReadAloudNavigator private constructor(
     public data class Playback(
         val state: State,
         val playWhenReady: Boolean,
-        val node: ReadAloudLeafNode,
+        val node: ReadAloudNode,
         val utteranceLocation: UtteranceLocation,
     )
 
@@ -61,7 +69,7 @@ public class ReadAloudNavigator private constructor(
 
         public data object Ready : State, MediaNavigator.State.Ready
 
-        public data object Buffering : State, MediaNavigator.State.Buffering
+        public data object Starved : State, MediaNavigator.State.Buffering
 
         public data object Ended : State, MediaNavigator.State.Ended
 
@@ -82,27 +90,45 @@ public class ReadAloudNavigator private constructor(
 
     private inner class AudioEngineListener : AudioEngine.Listener {
 
-        override fun onItemChanged(index: Int) {
+        override fun onItemChanged(engine: AudioEngine, index: Int) {
             with(stateMachine) {
-                stateMutable.value = stateMutable.value.onAudioEngineItemChanged(index)
+                stateMutable.value = stateMutable.value.onAudioEngineItemChanged(engine, index)
             }
         }
 
-        override fun onStateChanged(state: AudioEngine.State) {
+        override fun onStateChanged(engine: AudioEngine, state: AudioEngine.State) {
             with(stateMachine) {
-                stateMutable.value = stateMutable.value.onAudioEngineStateChanged(state)
+                stateMutable.value = stateMutable.value.onAudioEngineStateChanged(engine, state)
             }
         }
     }
 
-    private val audioEngine = audioEngineFactory(AudioEngineListener())
+    private val segmentFactory = ReadAloudSegmentFactory(
+        audioEngineFactory = { audioEngineFactory(AudioEngineListener()) },
+        ttsEngineFactory = ttsEngineFactory
+    )
 
-    private val stateMachine = ReadAloudStateMachine(audioEngine)
+    private val dataLoader = ReadAloudDataLoader(segmentFactory, initialSettings)
 
-    private val stateMutable: MutableStateFlow<ReadAloudStateMachine.State> = run {
-        val engineFood = EngineFood.AudioEngineFood.fromNode(firstLeaf)!!
-        MutableStateFlow(stateMachine.play(engineFood, playWhenReady = true))
+    private val navigationHelper = ReadAloudNavigationHelper(initialSettings)
+
+    private val stateMachine = ReadAloudStateMachine(dataLoader, navigationHelper)
+
+    private val initialNode = with(navigationHelper) {
+        val nodeFromLocation = initialLocation
+            ?.let { guidedNavigationTree.firstMatchingLocation(it) }
+            ?.firstContentNode()
+        nodeFromLocation ?: guidedNavigationTree.firstContentNode() ?: guidedNavigationTree
     }
+
+    private val stateMutable: MutableStateFlow<ReadAloudStateMachine.State> =
+        MutableStateFlow(
+            stateMachine.play(
+                segment = dataLoader.getItemRef(initialNode)!!.segment,
+                playWhenReady = true,
+                settings = initialSettings
+            )
+        )
 
     private val coroutineScope: CoroutineScope =
         MainScope()
@@ -117,7 +143,7 @@ public class ReadAloudNavigator private constructor(
             )
         }
 
-    private val ReadAloudLeafNode.utteranceLocation: UtteranceLocation get() {
+    private val ReadAloudNode.utteranceLocation: UtteranceLocation get() {
         val textref = refs.firstNotNullOfOrNull { it as? GuidedNavigationTextRef }
         checkNotNull(textref)
         val href = textref.url.removeFragment()
@@ -135,7 +161,7 @@ public class ReadAloudNavigator private constructor(
             is ReadAloudStateMachine.PlaybackState.Ready ->
                 State.Ready
             is ReadAloudStateMachine.PlaybackState.Starved ->
-                State.Buffering
+                State.Starved
             is ReadAloudStateMachine.PlaybackState.Ended ->
                 State.Ended
             is ReadAloudStateMachine.PlaybackState.Failure ->
@@ -161,24 +187,34 @@ public class ReadAloudNavigator private constructor(
     }
 
     public fun canEscape(): Boolean =
-        stateMutable.value.node.isEscapable()
+        with(navigationHelper) {
+            stateMutable.value.node.isEscapable()
+        }
 
     public fun canSkip(): Boolean =
-        stateMutable.value.node.isSkippable()
+        with(navigationHelper) {
+            stateMutable.value.node.isSkippable()
+        }
 
     public fun escape(force: Boolean = true) {
-        stateMutable.value.node.escape(force)
-            ?.let { go(it) }
+        with(navigationHelper) {
+            stateMutable.value.node.escape(force)
+                ?.let { go(it) }
+        }
     }
 
     public fun skipToPrevious(force: Boolean = true) {
-        stateMutable.value.node.skipToPrevious(force)
-            ?.let { go(it) }
+        with(navigationHelper) {
+            stateMutable.value.node.skipToPrevious(force)
+                ?.let { go(it) }
+        }
     }
 
     public fun skipToNext(force: Boolean = true) {
-        stateMutable.value.node.skipToNext(force)
-            ?.let { go(it) }
+        with(navigationHelper) {
+            stateMutable.value.node.skipToNext(force)
+                ?.let { go(it) }
+        }
     }
 
     public val location: StateFlow<ReadAloudLocation> =
@@ -196,8 +232,10 @@ public class ReadAloudNavigator private constructor(
         }
 
     public fun goTo(location: ReadAloudGoLocation) {
-        guidedNavigationTree.firstMatchingLocation(location)
-            ?.let { go(it) }
+        with(navigationHelper) {
+            guidedNavigationTree.firstMatchingLocation(location)
+                ?.let { go(it) }
+        }
     }
 
     public fun goTo(location: ReadAloudLocation) {
@@ -221,5 +259,12 @@ public class ReadAloudNavigator private constructor(
             textAnchor = null
         )
         goTo(location)
+    }
+
+    public var settings: ReadAloudSettings by Delegates.observable(initialSettings) {
+            property, oldValue, newValue ->
+        with(stateMachine) {
+            stateMutable.value = stateMutable.value.updateSettings(oldValue, newValue)
+        }
     }
 }

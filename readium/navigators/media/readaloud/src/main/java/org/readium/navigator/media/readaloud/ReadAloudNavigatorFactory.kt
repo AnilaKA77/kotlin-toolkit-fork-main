@@ -10,8 +10,8 @@ import android.app.Application
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.guided.GuidedNavigationObject
 import org.readium.r2.shared.publication.Publication
+import org.readium.r2.shared.publication.epub.MediaOverlaysService
 import org.readium.r2.shared.publication.services.GuidedNavigationService
-import org.readium.r2.shared.publication.services.guidedNavigationService
 import org.readium.r2.shared.util.Try
 import org.readium.r2.shared.util.data.ReadError
 import org.readium.r2.shared.util.getOrElse
@@ -21,6 +21,7 @@ public class ReadAloudNavigatorFactory private constructor(
     private val guidedNavigationService: GuidedNavigationService,
     private val resources: List<ReadAloudPublication.Item>,
     private val audioEngineFactory: (AudioEngine.Listener) -> AudioEngine,
+    private val ttsEngineFactory: () -> TtsEngine,
 ) {
 
     public companion object {
@@ -29,12 +30,29 @@ public class ReadAloudNavigatorFactory private constructor(
             application: Application,
             publication: Publication,
             audioEngineProvider: AudioEngineProvider,
+            ttsEngineProvider: TtsEngineProvider,
+            usePrerecordedVoicesWhenAvailable: Boolean = true,
         ): ReadAloudNavigatorFactory? {
-            val guidedNavService = publication.guidedNavigationService
-                ?: return null
+            var guidedNavService: GuidedNavigationService? = null
+
+            if (usePrerecordedVoicesWhenAvailable) {
+                guidedNavService = publication.findService(MediaOverlaysService::class)
+            }
+            if (guidedNavService == null) {
+                guidedNavService = publication.findService(GuidedNavigationService::class)
+            }
+
+            if (guidedNavService == null) {
+                return null
+            }
 
             val audioEngineFactory = { listener: AudioEngine.Listener ->
                 audioEngineProvider.createEngine(publication, listener)
+            }
+
+            val ttsEngineFactory = {
+                val voice = ttsEngineProvider.voices.first()
+                ttsEngineProvider.createEngine(voice)
             }
 
             val resources = (publication.readingOrder + publication.resources).map {
@@ -47,7 +65,8 @@ public class ReadAloudNavigatorFactory private constructor(
             return ReadAloudNavigatorFactory(
                 guidedNavigationService = guidedNavService,
                 resources = resources,
-                audioEngineFactory = audioEngineFactory
+                audioEngineFactory = audioEngineFactory,
+                ttsEngineFactory = ttsEngineFactory
             )
         }
     }
@@ -67,6 +86,7 @@ public class ReadAloudNavigatorFactory private constructor(
     }
 
     public suspend fun createNavigator(
+        initialSettings: ReadAloudSettings,
         initialLocation: ReadAloudGoLocation? = null,
     ): Try<ReadAloudNavigator, Error> {
         val guidedDocs = buildList {
@@ -94,9 +114,11 @@ public class ReadAloudNavigatorFactory private constructor(
         )
 
         val navigator = ReadAloudNavigator(
+            initialSettings = initialSettings,
             initialLocation = initialLocation,
             publication = navigatorPublication,
-            audioEngineFactory = audioEngineFactory
+            audioEngineFactory = audioEngineFactory,
+            ttsEngineFactory = ttsEngineFactory
         )
 
         return Try.success(navigator)
