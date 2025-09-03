@@ -22,9 +22,10 @@ public class ExoPlayerEngineProvider(
 
     override fun createEngine(
         publication: Publication,
+        playlist: List<AudioEngine.Item>,
         listener: AudioEngine.Listener,
     ): ExoPlayerEngine {
         val dataSourceFactory = ExoPlayerDataSource.Factory(publication)
-        return ExoPlayerEngine(application, dataSourceFactory, listener)
+        return ExoPlayerEngine(application, dataSourceFactory, playlist, listener)
     }
 }

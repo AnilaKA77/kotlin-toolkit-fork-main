@@ -4,6 +4,8 @@
  * available in the top-level LICENSE file of the project.
  */
 
+@file:OptIn(ExperimentalReadiumApi::class)
+
 package org.readium.navigator.media.readaloud
 
 import org.readium.navigator.common.CssSelector
@@ -13,6 +15,8 @@ import org.readium.navigator.common.GoLocation
 import org.readium.navigator.common.Location
 import org.readium.navigator.common.TextAnchor
 import org.readium.navigator.common.TextAnchorLocation
+import org.readium.navigator.common.TextQuote
+import org.readium.navigator.common.TextQuoteLocation
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Locator.Locations
@@ -74,11 +78,32 @@ internal data class TtsLocation(
 }
 
 @ExperimentalReadiumApi
-public data class UtteranceLocation(
+public sealed interface UtteranceLocation : ExportableLocation {
+    override val href: Url
+
+    public val textQuote: TextQuote?
+    public val cssSelector: CssSelector?
+}
+
+internal data class MediaOverlaysUtteranceLocation(
     override val href: Url,
     private val mediaType: MediaType?,
     override val cssSelector: CssSelector?,
-) : ExportableLocation, CssSelectorLocation {
+) : UtteranceLocation, CssSelectorLocation {
+
+    override val textQuote: TextQuote? = null
+
+    override fun toLocator(): Locator {
+        TODO("Not yet implemented")
+    }
+}
+
+internal data class TtsUtteranceLocation(
+    override val href: Url,
+    private val mediaType: MediaType?,
+    override val cssSelector: CssSelector?,
+    override val textQuote: TextQuote,
+) : UtteranceLocation, CssSelectorLocation, TextQuoteLocation {
 
     override fun toLocator(): Locator {
         TODO("Not yet implemented")

@@ -12,27 +12,29 @@ import org.readium.r2.shared.guided.GuidedNavigationObject
 import org.readium.r2.shared.publication.Publication
 import org.readium.r2.shared.publication.epub.MediaOverlaysService
 import org.readium.r2.shared.publication.services.GuidedNavigationService
+import org.readium.r2.shared.publication.services.content.ContentService
+import org.readium.r2.shared.util.Error as BaseError
 import org.readium.r2.shared.util.Try
 import org.readium.r2.shared.util.data.ReadError
 import org.readium.r2.shared.util.getOrElse
 
 @ExperimentalReadiumApi
-public class ReadAloudNavigatorFactory private constructor(
+public class ReadAloudNavigatorFactory<V : TtsVoice, E : BaseError> private constructor(
     private val guidedNavigationService: GuidedNavigationService,
     private val resources: List<ReadAloudPublication.Item>,
-    private val audioEngineFactory: (AudioEngine.Listener) -> AudioEngine,
-    private val ttsEngineFactory: () -> TtsEngine,
+    private val audioEngineFactory: (List<AudioEngine.Item>, AudioEngine.Listener) -> AudioEngine,
+    private val ttsEngineProvider: TtsEngineProvider<V, E>,
 ) {
 
     public companion object {
 
-        public operator fun invoke(
+        public operator fun <V : TtsVoice, E : BaseError> invoke(
             application: Application,
             publication: Publication,
             audioEngineProvider: AudioEngineProvider,
-            ttsEngineProvider: TtsEngineProvider,
+            ttsEngineProvider: TtsEngineProvider<V, E>,
             usePrerecordedVoicesWhenAvailable: Boolean = true,
-        ): ReadAloudNavigatorFactory? {
+        ): ReadAloudNavigatorFactory<V, E>? {
             var guidedNavService: GuidedNavigationService? = null
 
             if (usePrerecordedVoicesWhenAvailable) {
@@ -43,16 +45,16 @@ public class ReadAloudNavigatorFactory private constructor(
             }
 
             if (guidedNavService == null) {
+                publication.findService(ContentService::class)
+                    ?.let { guidedNavService = TtsGuidedNavigationService(it) }
+            }
+
+            if (guidedNavService == null) {
                 return null
             }
 
-            val audioEngineFactory = { listener: AudioEngine.Listener ->
-                audioEngineProvider.createEngine(publication, listener)
-            }
-
-            val ttsEngineFactory = {
-                val voice = ttsEngineProvider.voices.first()
-                ttsEngineProvider.createEngine(voice)
+            val audioEngineFactory = { playlist: List<AudioEngine.Item>, listener: AudioEngine.Listener ->
+                audioEngineProvider.createEngine(publication, playlist, listener)
             }
 
             val resources = (publication.readingOrder + publication.resources).map {
@@ -66,18 +68,18 @@ public class ReadAloudNavigatorFactory private constructor(
                 guidedNavigationService = guidedNavService,
                 resources = resources,
                 audioEngineFactory = audioEngineFactory,
-                ttsEngineFactory = ttsEngineFactory
+                ttsEngineProvider = ttsEngineProvider
             )
         }
     }
 
     public sealed class Error(
         override val message: String,
-        override val cause: org.readium.r2.shared.util.Error?,
-    ) : org.readium.r2.shared.util.Error {
+        override val cause: BaseError?,
+    ) : BaseError {
 
         public class UnsupportedPublication(
-            cause: org.readium.r2.shared.util.Error? = null,
+            cause: BaseError? = null,
         ) : Error("Publication is not supported.", cause)
 
         public class GuidedNavigationService(
@@ -88,7 +90,7 @@ public class ReadAloudNavigatorFactory private constructor(
     public suspend fun createNavigator(
         initialSettings: ReadAloudSettings,
         initialLocation: ReadAloudGoLocation? = null,
-    ): Try<ReadAloudNavigator, Error> {
+    ): Try<ReadAloudNavigator<V, E>, Error> {
         val guidedDocs = buildList {
             val iterator = guidedNavigationService.iterator()
             while (iterator.hasNext()) {
@@ -118,7 +120,7 @@ public class ReadAloudNavigatorFactory private constructor(
             initialLocation = initialLocation,
             publication = navigatorPublication,
             audioEngineFactory = audioEngineFactory,
-            ttsEngineFactory = ttsEngineFactory
+            ttsEngineProvider = ttsEngineProvider
         )
 
         return Try.success(navigator)

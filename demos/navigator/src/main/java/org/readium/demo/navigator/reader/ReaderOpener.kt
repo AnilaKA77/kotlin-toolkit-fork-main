@@ -26,6 +26,7 @@ import org.readium.navigator.common.DecorationLocation
 import org.readium.navigator.common.PreferencesEditor
 import org.readium.navigator.common.Settings
 import org.readium.navigator.common.SettingsController
+import org.readium.navigator.media.readaloud.AndroidTtsEngine
 import org.readium.navigator.media.readaloud.ReadAloudNavigatorFactory
 import org.readium.navigator.media.readaloud.ReadAloudSettings
 import org.readium.navigator.web.fixedlayout.FixedWebGoLocation
@@ -197,7 +198,7 @@ class ReaderOpener(
     private suspend fun createReadAloudReader(
         url: AbsoluteUrl,
         publication: Publication,
-        navigatorFactory: ReadAloudNavigatorFactory,
+        navigatorFactory: ReadAloudNavigatorFactory<AndroidTtsEngine.Voice, AndroidTtsEngine.Error>,
         initialLocator: Locator?,
     ): Try<ReadAloudReaderState, Error> {
         val initialSettings = ReadAloudSettings(

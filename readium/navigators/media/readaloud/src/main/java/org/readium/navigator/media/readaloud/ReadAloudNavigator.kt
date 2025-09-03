@@ -16,33 +16,36 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.withContext
 import org.readium.navigator.common.CssSelector
+import org.readium.navigator.common.TextQuote
 import org.readium.navigator.media.common.MediaNavigator
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.InternalReadiumApi
 import org.readium.r2.shared.extensions.addPrefix
 import org.readium.r2.shared.extensions.mapStateIn
 import org.readium.r2.shared.guided.GuidedNavigationTextRef
+import org.readium.r2.shared.util.Error as BaseError
+import org.readium.r2.shared.util.Language
 import org.readium.r2.shared.util.Url
 import org.readium.r2.shared.util.data.ReadError
 
 @ExperimentalReadiumApi
-public class ReadAloudNavigator private constructor(
+public class ReadAloudNavigator<V : TtsVoice, E : BaseError> private constructor(
     private val guidedNavigationTree: ReadAloudNode,
     private val resources: List<ReadAloudPublication.Item>,
-    audioEngineFactory: (AudioEngine.Listener) -> AudioEngine,
-    ttsEngineFactory: () -> TtsEngine,
+    audioEngineFactory: (List<AudioEngine.Item>, AudioEngine.Listener) -> AudioEngine,
+    ttsEngineProvider: TtsEngineProvider<V, E>,
     initialSettings: ReadAloudSettings,
     initialLocation: ReadAloudGoLocation?,
 ) {
     public companion object {
 
-        internal suspend operator fun invoke(
+        internal suspend operator fun <V : TtsVoice, E : BaseError> invoke(
             initialLocation: ReadAloudGoLocation?,
             initialSettings: ReadAloudSettings,
             publication: ReadAloudPublication,
-            audioEngineFactory: (AudioEngine.Listener) -> AudioEngine,
-            ttsEngineFactory: () -> TtsEngine,
-        ): ReadAloudNavigator {
+            audioEngineFactory: (List<AudioEngine.Item>, AudioEngine.Listener) -> AudioEngine,
+            ttsEngineProvider: TtsEngineProvider<V, E>,
+        ): ReadAloudNavigator<V, E> {
             val tree = withContext(Dispatchers.Default) {
                 ReadAloudNode.fromGuidedNavigationObject(publication.guidedNavigationTree)
             }
@@ -51,7 +54,7 @@ public class ReadAloudNavigator private constructor(
                 guidedNavigationTree = tree,
                 resources = publication.resources,
                 audioEngineFactory = audioEngineFactory,
-                ttsEngineFactory = ttsEngineFactory,
+                ttsEngineProvider = ttsEngineProvider,
                 initialSettings = initialSettings,
                 initialLocation = initialLocation
             )
@@ -62,7 +65,7 @@ public class ReadAloudNavigator private constructor(
         val state: State,
         val playWhenReady: Boolean,
         val node: ReadAloudNode,
-        val utteranceLocation: UtteranceLocation,
+        val utteranceLocation: UtteranceLocation?,
     )
 
     public sealed interface State {
@@ -78,10 +81,10 @@ public class ReadAloudNavigator private constructor(
 
     public sealed class Error(
         override val message: String,
-        override val cause: org.readium.r2.shared.util.Error?,
-    ) : org.readium.r2.shared.util.Error {
+        override val cause: BaseError?,
+    ) : BaseError {
 
-        public data class EngineError(override val cause: org.readium.r2.shared.util.Error) :
+        public data class EngineError(override val cause: BaseError) :
             Error("An error occurred in the playback engine.", cause)
 
         public data class ContentError(override val cause: ReadError) :
@@ -92,20 +95,91 @@ public class ReadAloudNavigator private constructor(
 
         override fun onItemChanged(engine: AudioEngine, index: Int) {
             with(stateMachine) {
-                stateMutable.value = stateMutable.value.onAudioEngineItemChanged(engine, index)
+                if (engine == stateMutable.value.segment.player.player) {
+                    stateMutable.value = stateMutable.value.onAudioEngineItemChanged(index)
+                }
             }
         }
 
         override fun onStateChanged(engine: AudioEngine, state: AudioEngine.State) {
             with(stateMachine) {
-                stateMutable.value = stateMutable.value.onAudioEngineStateChanged(engine, state)
+                if (engine == stateMutable.value.segment.player.player) {
+                    stateMutable.value = stateMutable.value.onAudioEngineStateChanged(state)
+                }
+            }
+        }
+    }
+
+    private inner class TtsPlayerListener : TtsPlayer.Listener<E> {
+
+        override fun onItemChanged(
+            player: TtsPlayer<E>,
+            index: Int,
+        ) {
+            with(stateMachine) {
+                if (player == stateMutable.value.segment.player.player) {
+                    stateMutable.value = stateMutable.value.onTtsPlayerItemChanged(index)
+                }
+            }
+        }
+
+        override fun onStateChanged(
+            player: TtsPlayer<E>,
+            state: TtsPlayer.State,
+        ) {
+            with(stateMachine) {
+                if (player == stateMutable.value.segment.player.player) {
+                    stateMutable.value = stateMutable.value.onTtsPlayerStateChanged(state)
+                }
             }
         }
     }
 
     private val segmentFactory = ReadAloudSegmentFactory(
-        audioEngineFactory = { audioEngineFactory(AudioEngineListener()) },
-        ttsEngineFactory = ttsEngineFactory
+        audioEngineFactory = { playlist: List<AudioEngine.Item> ->
+            audioEngineFactory(playlist, AudioEngineListener())
+        },
+        ttsPlayerFactory = { language: Language?, utterances: List<String> ->
+            val engineFactory = { engineListener: TtsEngine.Listener<E> ->
+                // FIXME support engine provider with no voice
+                /*val preferredVoiceWithRegion =
+                    settings.voices[language]
+                        ?.let { voiceForName(it.value) }
+
+                val preferredVoiceWithoutRegion =
+                    settings.voices[language.removeRegion()]
+                        ?.let { voiceForName(it.value) }
+
+
+
+                val voice = preferredVoiceWithRegion
+                    ?: preferredVoiceWithoutRegion
+                    ?: run {
+                        voiceSelector
+                            .voice(language, voices)
+                            ?.let { voiceForName(it.id.value) }
+                    }*/
+
+                val voice = ttsEngineProvider.voices
+                    .firstOrNull { voice ->
+                        language in voice.languages
+                    } ?: ttsEngineProvider.voices
+                    .firstOrNull { voice ->
+                        language?.removeRegion() in voice.languages.map { it.removeRegion() }
+                    }
+                    ?: ttsEngineProvider.voices.first()
+                val engine = ttsEngineProvider.createEngine(
+                    voice = checkNotNull(voice),
+                    utterances = utterances,
+                    listener = engineListener
+                )
+                engine as? PausableTtsEngine ?: PauseDecorator(engine)
+            }
+            TtsPlayer(
+                engineFactory = engineFactory,
+                listener = TtsPlayerListener()
+            )
+        }
     )
 
     private val dataLoader = ReadAloudDataLoader(segmentFactory, initialSettings)
@@ -121,17 +195,26 @@ public class ReadAloudNavigator private constructor(
         nodeFromLocation ?: guidedNavigationTree.firstContentNode() ?: guidedNavigationTree
     }
 
-    private val stateMutable: MutableStateFlow<ReadAloudStateMachine.State> =
+    private val stateMutable: MutableStateFlow<ReadAloudStateMachine.State> = run {
+        val itemRef = dataLoader.getItemRef(initialNode)!!
+
         MutableStateFlow(
             stateMachine.play(
-                segment = dataLoader.getItemRef(initialNode)!!.segment,
-                playWhenReady = true,
+                segment = itemRef.segment,
+                index = itemRef.nodeIndex ?: 0,
+                playWhenReady = false,
                 settings = initialSettings
             )
         )
+    }
 
     private val coroutineScope: CoroutineScope =
         MainScope()
+
+    init {
+        stateMutable.value.segment.player.prepare()
+        play()
+    }
 
     public val playback: StateFlow<Playback> =
         stateMutable.mapStateIn(coroutineScope) { state ->
@@ -139,20 +222,53 @@ public class ReadAloudNavigator private constructor(
                 playWhenReady = state.playWhenReady,
                 state = state.playbackState.toState(),
                 node = state.node,
-                utteranceLocation = state.node.utteranceLocation
+                utteranceLocation = state.utteranceLocation
             )
         }
 
-    private val ReadAloudNode.utteranceLocation: UtteranceLocation get() {
+    private val ReadAloudStateMachine.State.utteranceLocation: UtteranceLocation? get() =
+        when (segment) {
+            is AudioSegment -> {
+                val textref = segment.textRefs[index]
+                val href = textref.removeFragment()
+                val cssSelector = textref.fragment
+                    ?.let { fragment -> CssSelector(fragment.addPrefix("#")) }
+                MediaOverlaysUtteranceLocation(
+                    href = href,
+                    mediaType = resources.first { item -> item.href == href }.mediaType,
+                    cssSelector = cssSelector
+                )
+            }
+            is TtsSegment<*> -> null
+        }
+
+    private val ReadAloudNode.mediaOverlaysUtteranceLocation: UtteranceLocation? get() {
         val textref = refs.firstNotNullOfOrNull { it as? GuidedNavigationTextRef }
-        checkNotNull(textref)
+            ?: return null
         val href = textref.url.removeFragment()
         val cssSelector = textref.url.fragment
             ?.let { fragment -> CssSelector(fragment.addPrefix("#")) }
-        return UtteranceLocation(
+        return MediaOverlaysUtteranceLocation(
             href = href,
             mediaType = resources.first { item -> item.href == href }.mediaType,
             cssSelector = cssSelector
+        )
+    }
+
+    private val ReadAloudNode.ttsUtteranceLocation: UtteranceLocation? get() {
+        val textref = refs.firstNotNullOfOrNull { it as? GuidedNavigationTextRef }
+            ?: return null
+        val href = textref.url.removeFragment()
+        val cssSelector = textref.url.fragment
+            ?.let { fragment -> CssSelector(fragment.addPrefix("#")) }
+        val text = text
+            ?: return null
+        return TtsUtteranceLocation(
+            href = href,
+            mediaType = resources.first { item -> item.href == href }.mediaType,
+            cssSelector = cssSelector,
+            // FIXME: prefix and suffix
+            textQuote = TextQuote(text.plain!!, prefix = "", suffix = "")
         )
     }
 

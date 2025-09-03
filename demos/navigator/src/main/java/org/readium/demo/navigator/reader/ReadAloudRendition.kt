@@ -53,9 +53,11 @@ fun ReadAloudRendition(
 
                 Text("Play When Ready: ${playbackState.value.playWhenReady}")
 
-                Text("Resource Href: ${playbackState.value.utteranceLocation.href}")
+                Text("Resource Href: ${playbackState.value.utteranceLocation?.href}")
 
-                Text("Utterance Selector ${playbackState.value.utteranceLocation.cssSelector?.value}")
+                Text("Utterance Css Selector ${playbackState.value.utteranceLocation?.cssSelector?.value}")
+
+                Text("Utterance ${playbackState.value.utteranceLocation?.textQuote?.text}")
             }
 
             Toolbar(readerState)

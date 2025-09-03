@@ -113,7 +113,11 @@ public class EpubParser(
                         HtmlResourceContentIterator.Factory()
                     )
                 )
-            ).also { it[MediaOverlaysService::class] = SmilBasedMediaOverlaysService.createFactory(smils) }
+            ).also {
+                if (smils.isNotEmpty()) {
+                    it[MediaOverlaysService::class] = SmilBasedMediaOverlaysService.createFactory(smils)
+                }
+            }
         )
 
         return Try.success(builder)

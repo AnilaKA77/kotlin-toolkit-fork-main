@@ -13,6 +13,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.window.PopupProperties
+import org.readium.navigator.media.readaloud.AndroidTtsEngine
 import org.readium.navigator.media.readaloud.ReadAloudNavigatorFactory
 import org.readium.navigator.web.fixedlayout.FixedWebRenditionFactory
 import org.readium.navigator.web.reflowable.ReflowableWebRenditionFactory
@@ -48,7 +49,7 @@ sealed class SelectNavigatorItem(
     ) : SelectNavigatorItem("Fixed Web Rendition")
 
     data class ReadAloud(
-        override val factory: ReadAloudNavigatorFactory,
+        override val factory: ReadAloudNavigatorFactory<AndroidTtsEngine.Voice, AndroidTtsEngine.Error>,
     ) : SelectNavigatorItem("Read Aloud Navigator")
 }
 

@@ -16,7 +16,7 @@ import org.readium.r2.shared.util.Url
  */
 @ExperimentalReadiumApi
 public data class GuidedNavigationDocument(
-    val links: List<Link>,
+    val links: List<Link> = emptyList(),
     val guided: List<GuidedNavigationObject>,
 )
 
@@ -25,10 +25,10 @@ public data class GuidedNavigationDocument(
  */
 @ExperimentalReadiumApi
 public data class GuidedNavigationObject(
-    val children: List<GuidedNavigationObject>,
-    val roles: Set<GuidedNavigationRole>,
-    val refs: Set<GuidedNavigationRef>,
-    val text: GuidedNavigationText?,
+    val children: List<GuidedNavigationObject> = emptyList(),
+    val roles: Set<GuidedNavigationRole> = emptySet(),
+    val refs: Set<GuidedNavigationRef> = emptySet(),
+    val text: GuidedNavigationText? = null,
 )
 
 /**
@@ -42,11 +42,10 @@ public value class SsmlString(public val value: String)
  * Text holder for a guided navigation object.
  */
 @ExperimentalReadiumApi
-@ConsistentCopyVisibility
-public data class GuidedNavigationText private constructor(
+public data class GuidedNavigationText(
     val plain: String?,
-    val ssml: SsmlString?,
-    val language: Language?,
+    val ssml: SsmlString? = null,
+    val language: Language? = null,
 ) {
     init {
         require(plain != null || ssml != null)

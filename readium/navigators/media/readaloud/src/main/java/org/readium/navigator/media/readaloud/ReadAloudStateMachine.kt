@@ -11,8 +11,8 @@ package org.readium.navigator.media.readaloud
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.util.Error
 
-internal class ReadAloudStateMachine(
-    private val dataLoader: ReadAloudDataLoader,
+internal class ReadAloudStateMachine<E : Error>(
+    private val dataLoader: ReadAloudDataLoader<E>,
     private val navigationHelper: ReadAloudNavigationHelper,
 ) {
 
@@ -31,42 +31,38 @@ internal class ReadAloudStateMachine(
         val playbackState: PlaybackState,
         val playWhenReady: Boolean,
         val node: ReadAloudNode,
+        val index: Int,
         val segment: ReadAloudSegment,
         val settings: ReadAloudSettings,
     )
 
-    sealed interface Event {
+    fun play(
+        segment: ReadAloudSegment,
+        index: Int,
+        playWhenReady: Boolean,
+        settings: ReadAloudSettings,
+    ): State {
+        segment.player.seekTo(index)
 
-        data class AudioEngineStateChanged(
-            val engine: AudioEngine,
-            val state: AudioEngine.State,
-        ) : Event
-
-        data class AudioEngineItemChanged(
-            val engine: AudioEngine,
-            val index: Int,
-        ) : Event
-    }
-
-    fun play(segment: ReadAloudSegment, playWhenReady: Boolean, settings: ReadAloudSettings): State {
-        segment.engine.playWhenReady = playWhenReady
+        segment.player.playWhenReady = playWhenReady
 
         return State(
             playbackState = PlaybackState.Starved,
             playWhenReady = playWhenReady,
-            node = segment.nodes[0],
+            node = segment.nodes[index],
+            index = index,
             segment = segment,
             settings = settings
         )
     }
 
     fun State.pause(): State {
-        segment.engine.playWhenReady = false
+        segment.player.playWhenReady = false
         return copy(playWhenReady = false)
     }
 
     fun State.resume(): State {
-        segment.engine.playWhenReady = true
+        segment.player.playWhenReady = true
         return copy(playWhenReady = true)
     }
 
@@ -77,14 +73,9 @@ internal class ReadAloudStateMachine(
         val itemRef = dataLoader.getItemRef(firstContentNode)
             ?: return copy(playbackState = PlaybackState.Ended)
 
-        val engineFood = itemRef.segment
+        val index = itemRef.nodeIndex!!
 
-        when (engineFood) {
-            is AudioSegment -> engineFood.engine.seekTo(itemRef.nodeIndex!!)
-            is TtsSegment -> TODO()
-        }
-
-        return play(engineFood, playWhenReady, settings)
+        return play(itemRef.segment, index, playWhenReady, settings)
     }
 
     fun State.updateSettings(
@@ -96,45 +87,48 @@ internal class ReadAloudStateMachine(
         return copy(settings = newSettings)
     }
 
-    fun State.onEvent(event: Event): State = when (event) {
-        is Event.AudioEngineStateChanged ->
-            onAudioEngineStateChanged(event.engine, event.state)
-        is Event.AudioEngineItemChanged ->
-            onAudioEngineItemChanged(event.engine, event.index)
-    }
-
-    fun State.onAudioEngineStateChanged(engine: AudioEngine, audioEngineState: AudioEngine.State): State {
-        val currentEngine = (segment as? AudioSegment)?.engine
-        if (currentEngine != engine) {
-            return this
-        }
-
+    fun State.onAudioEngineStateChanged(audioEngineState: AudioEngine.State): State {
         return when (audioEngineState) {
             AudioEngine.State.Ready -> copy(playbackState = PlaybackState.Ready)
             AudioEngine.State.Starved -> copy(playbackState = PlaybackState.Starved)
-            AudioEngine.State.Ended -> onAudioEngineEnded()
+            AudioEngine.State.Ended -> onSegmentPlaybackEnded()
         }
     }
 
-    private fun State.onAudioEngineEnded(): State {
+    fun State.onAudioEngineItemChanged(item: Int): State {
+        dataLoader.onPlaybackProgressed(segment.nodes[item])
+        return copy(node = segment.nodes[item], index = item)
+    }
+
+    fun State.onTtsPlayerStateChanged(state: TtsPlayer.State): State {
+        return when (state) {
+            TtsPlayer.State.Ready -> copy(playbackState = PlaybackState.Ready)
+            TtsPlayer.State.Starved -> copy(playbackState = PlaybackState.Starved)
+            TtsPlayer.State.Ended -> onSegmentPlaybackEnded()
+        }
+    }
+
+    fun State.onTtsPlayerItemChanged(item: Int): State {
+        dataLoader.onPlaybackProgressed(segment.nodes[item])
+        return copy(node = segment.nodes[item], index = item)
+    }
+
+    private fun State.onSegmentPlaybackEnded(): State {
+        segment.player.release()
+
         val nextNode = node.next()
             ?: return copy(playbackState = PlaybackState.Ended)
 
         val newSegment = dataLoader.getItemRef(nextNode)?.segment
             ?: return copy(playbackState = PlaybackState.Ended)
 
-        newSegment.engine.playWhenReady = playWhenReady
+        newSegment.player.playWhenReady = playWhenReady
 
-        return copy(segment = newSegment, playbackState = PlaybackState.Starved, node = newSegment.nodes[0])
-    }
-
-    fun State.onAudioEngineItemChanged(engine: AudioEngine, item: Int): State {
-        val currentEngine = (segment as? AudioSegment)?.engine
-        if (currentEngine != engine) {
-            return this
-        }
-
-        dataLoader.onPlaybackProgressed(segment.nodes[item])
-        return copy(node = segment.nodes[item])
+        return copy(
+            segment = newSegment,
+            playbackState = PlaybackState.Starved,
+            node = newSegment.nodes[0],
+            index = 0
+        )
     }
 }

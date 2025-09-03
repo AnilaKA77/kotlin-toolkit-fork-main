@@ -10,20 +10,16 @@ package org.readium.navigator.media.readaloud
 
 import kotlin.properties.Delegates
 import org.readium.r2.shared.ExperimentalReadiumApi
+import org.readium.r2.shared.util.Error
 
-internal class ReadAloudDataLoader(
-    private val segmentFactory: ReadAloudSegmentFactory,
+internal class ReadAloudDataLoader<E : Error>(
+    private val segmentFactory: ReadAloudSegmentFactory<E>,
     initialSettings: ReadAloudSettings,
 ) {
-
-    sealed interface NodeInfo
-
     data class ItemRef(
         val segment: ReadAloudSegment,
         val nodeIndex: Int?,
-    ) : NodeInfo
-
-    data object EmptyNode : NodeInfo
+    )
 
     var settings by Delegates.observable(initialSettings) { property, oldValue, newValue ->
         preloadedRefs.clear()
@@ -35,7 +31,7 @@ internal class ReadAloudDataLoader(
         val nextNode = node.next() ?: return
 
         if (nextNode !in preloadedRefs) {
-            loadSegmentForNode(nextNode)
+            loadSegmentForNode(nextNode)?.player?.prepare()
         }
     }
 
@@ -44,16 +40,18 @@ internal class ReadAloudDataLoader(
         return preloadedRefs[node]
     }
 
-    private fun loadSegmentForNode(node: ReadAloudNode) {
+    private fun loadSegmentForNode(node: ReadAloudNode): ReadAloudSegment? {
         if (node in preloadedRefs) {
-            return
+            return null
         }
 
         val segment = segmentFactory.createSegmentFromNode(node)
-            ?: return // Ended
+            ?: return null // Ended
 
         val refs = computeRefsForSegment(segment)
         preloadedRefs.putAll(refs)
+
+        return segment
     }
 
     private fun computeRefsForSegment(segment: ReadAloudSegment): Map<ReadAloudNode, ItemRef> {

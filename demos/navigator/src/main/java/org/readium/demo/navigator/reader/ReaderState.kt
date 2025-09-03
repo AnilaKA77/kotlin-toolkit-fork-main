@@ -18,6 +18,7 @@ import org.readium.navigator.common.PreferencesEditor
 import org.readium.navigator.common.RenditionState
 import org.readium.navigator.common.SelectionController
 import org.readium.navigator.common.SelectionLocation
+import org.readium.navigator.media.readaloud.AndroidTtsEngine
 import org.readium.navigator.media.readaloud.ReadAloudNavigator
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.publication.Publication
@@ -48,7 +49,7 @@ data class VisualReaderState<L : ExportableLocation, G : GoLocation, S : Selecti
 data class ReadAloudReaderState(
     val url: AbsoluteUrl,
     val publication: Publication,
-    val navigator: ReadAloudNavigator,
+    val navigator: ReadAloudNavigator<AndroidTtsEngine.Voice, AndroidTtsEngine.Error>,
 ) : ReaderState {
 
     override fun close() {

@@ -37,6 +37,7 @@ import org.readium.r2.shared.util.data.ReadException
 @androidx.annotation.OptIn(UnstableApi::class)
 public class ExoPlayerEngine private constructor(
     private val exoPlayer: ExoPlayer,
+    override val playlist: List<AudioEngine.Item>,
     private val listener: AudioEngine.Listener,
 ) : AudioEngine {
 
@@ -45,6 +46,7 @@ public class ExoPlayerEngine private constructor(
         public operator fun invoke(
             application: Application,
             dataSourceFactory: DataSource.Factory,
+            playlist: List<AudioEngine.Item>,
             listener: AudioEngine.Listener,
         ): ExoPlayerEngine {
             val exoPlayer = ExoPlayer.Builder(application)
@@ -61,7 +63,7 @@ public class ExoPlayerEngine private constructor(
 
             exoPlayer.preloadConfiguration = ExoPlayer.PreloadConfiguration(10_000_000L)
 
-            return ExoPlayerEngine(exoPlayer, listener)
+            return ExoPlayerEngine(exoPlayer, playlist, listener)
         }
     }
 
@@ -102,16 +104,9 @@ public class ExoPlayerEngine private constructor(
     private val coroutineScope: CoroutineScope =
         MainScope()
 
-    private var prepareCalled: Boolean = false
-
     init {
         exoPlayer.addListener(Listener())
-    }
-
-    override fun setPlaylist(
-        items: List<AudioEngine.Item>,
-    ) {
-        val mediaItems = items.map { item ->
+        val mediaItems = playlist.map { item ->
             val clippingConfig = MediaItem.ClippingConfiguration.Builder()
                 .apply {
                     item.interval?.start?.let { setStartPositionMs(it.inWholeMilliseconds) }
@@ -123,11 +118,7 @@ public class ExoPlayerEngine private constructor(
                 .build()
         }
         exoPlayer.setMediaItems(mediaItems)
-
-        if (!prepareCalled) {
-            exoPlayer.prepare()
-            prepareCalled = true
-        }
+        exoPlayer.prepare()
     }
 
     override fun seekTo(index: Int) {
@@ -140,7 +131,7 @@ public class ExoPlayerEngine private constructor(
             exoPlayer.playWhenReady = value
         }
 
-    public fun close() {
+    public override fun release() {
         coroutineScope.cancel()
         exoPlayer.release()
     }
