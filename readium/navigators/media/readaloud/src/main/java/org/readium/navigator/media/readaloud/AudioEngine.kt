@@ -20,10 +20,10 @@ public interface AudioEngine {
 
         public fun onItemChanged(engine: AudioEngine, index: Int)
 
-        public fun onStateChanged(engine: AudioEngine, state: State)
+        public fun onStateChanged(engine: AudioEngine, state: PlaybackState)
     }
 
-    public enum class State {
+    public enum class PlaybackState {
         Ready,
         Starved,
         Ended,
@@ -34,9 +34,15 @@ public interface AudioEngine {
         val interval: TimeInterval?,
     )
 
+    public val playlist: List<Item>
+
     public var playWhenReady: Boolean
 
-    public val playlist: List<Item>
+    public var pitch: Double
+
+    public var speed: Double
+
+    public val playbackState: PlaybackState
 
     public fun seekTo(index: Int)
 

@@ -4,7 +4,11 @@
  * available in the top-level LICENSE file of the project.
  */
 
-@file:OptIn(ExperimentalReadiumApi::class)
+@file:OptIn(
+    ExperimentalReadiumApi::class,
+    InternalReadiumApi::class,
+    ExperimentalCoroutinesApi::class
+)
 
 package org.readium.demo.navigator.reader
 
@@ -12,7 +16,9 @@ import android.app.Application
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.collections.immutable.plus
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import org.readium.demo.navigator.decorations.FixedWebHighlightsManager
@@ -21,6 +27,7 @@ import org.readium.demo.navigator.decorations.ReflowableWebHighlightsManager
 import org.readium.demo.navigator.decorations.pageNumberDecorations
 import org.readium.demo.navigator.persistence.LocatorRepository
 import org.readium.demo.navigator.preferences.PreferencesManager
+import org.readium.demo.navigator.preferences.ReadAloudPreferencesEditor
 import org.readium.navigator.common.DecorationController
 import org.readium.navigator.common.DecorationLocation
 import org.readium.navigator.common.PreferencesEditor
@@ -28,7 +35,8 @@ import org.readium.navigator.common.Settings
 import org.readium.navigator.common.SettingsController
 import org.readium.navigator.media.readaloud.AndroidTtsEngine
 import org.readium.navigator.media.readaloud.ReadAloudNavigatorFactory
-import org.readium.navigator.media.readaloud.ReadAloudSettings
+import org.readium.navigator.media.readaloud.TtsEngineProvider
+import org.readium.navigator.media.readaloud.preferences.ReadAloudPreferences
 import org.readium.navigator.web.fixedlayout.FixedWebGoLocation
 import org.readium.navigator.web.fixedlayout.FixedWebLocation
 import org.readium.navigator.web.fixedlayout.FixedWebRenditionController
@@ -42,12 +50,12 @@ import org.readium.navigator.web.reflowable.ReflowableWebRenditionFactory
 import org.readium.navigator.web.reflowable.ReflowableWebSelectionLocation
 import org.readium.navigator.web.reflowable.preferences.ReflowableWebPreferences
 import org.readium.r2.shared.ExperimentalReadiumApi
-import org.readium.r2.shared.guided.GuidedNavigationRole
+import org.readium.r2.shared.InternalReadiumApi
+import org.readium.r2.shared.extensions.mapStateIn
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
 import org.readium.r2.shared.util.AbsoluteUrl
 import org.readium.r2.shared.util.Error
-import org.readium.r2.shared.util.Language
 import org.readium.r2.shared.util.Try
 import org.readium.r2.shared.util.getOrElse
 
@@ -81,6 +89,7 @@ class ReaderOpener(
                     url,
                     publication,
                     selectedNavigator.factory,
+                    selectedNavigator.ttsEngineProvider,
                     initialLocator
                 )
         }.getOrElse { error ->
@@ -199,26 +208,38 @@ class ReaderOpener(
         url: AbsoluteUrl,
         publication: Publication,
         navigatorFactory: ReadAloudNavigatorFactory<AndroidTtsEngine.Voice, AndroidTtsEngine.Error>,
+        ttsEngineProvider: TtsEngineProvider<AndroidTtsEngine.Voice, AndroidTtsEngine.Error>,
         initialLocator: Locator?,
     ): Try<ReadAloudReaderState, Error> {
-        val initialSettings = ReadAloudSettings(
-            language = Language("en"),
-            overrideContentLanguage = true,
-            preferRecordedVoices = true,
-            pitch = 1.0,
-            speed = 1.0,
-            voices = emptyMap(),
-            escapableRoles = GuidedNavigationRole.ESCAPABLE_ROLES.toSet(),
-            skippableRoles = GuidedNavigationRole.SKIPPABLE_ROLES.toSet()
-        )
+        val coroutineScope = MainScope()
 
-        val navigator = navigatorFactory.createNavigator(initialSettings)
+        val initialPreferences = ReadAloudPreferences()
+
+        val preferencesManager = PreferencesManager(initialPreferences)
+
+        val preferencesEditor = preferencesManager.preferences.mapStateIn(coroutineScope) {
+            ReadAloudPreferencesEditor(
+                editor = navigatorFactory.createPreferencesEditor(it),
+                availableVoices = ttsEngineProvider.voices
+            )
+        }
+
+        val navigator = navigatorFactory.createNavigator(preferencesEditor.value.settings)
             .getOrElse { return Try.failure(it) }
+
+        preferencesEditor
+            .flatMapLatest { it.preferencesState }
+            .onEach {
+                navigator.settings = preferencesEditor.value.settings
+                preferencesManager.setPreferences(it)
+            }.launchIn(coroutineScope)
 
         val readerState = ReadAloudReaderState(
             url = url,
+            coroutineScope = coroutineScope,
             publication = publication,
-            navigator = navigator
+            navigator = navigator,
+            preferencesEditor = preferencesEditor
         )
         return Try.success(readerState)
     }

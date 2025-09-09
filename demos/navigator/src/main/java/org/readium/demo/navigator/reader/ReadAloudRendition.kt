@@ -4,7 +4,7 @@
  * available in the top-level LICENSE file of the project.
  */
 
-@file:OptIn(ExperimentalReadiumApi::class)
+@file:OptIn(ExperimentalReadiumApi::class, ExperimentalMaterial3Api::class)
 
 package org.readium.demo.navigator.reader
 
@@ -20,23 +20,76 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
+import org.readium.demo.navigator.preferences.UserPreferences
 import org.readium.r2.shared.ExperimentalReadiumApi
 
 @Composable
 fun ReadAloudRendition(
     readerState: ReadAloudReaderState,
 ) {
+    val showPreferences = remember { mutableStateOf(false) }
+    val preferencesSheetState = rememberModalBottomSheetState()
+
+    if (showPreferences.value) {
+        ModalBottomSheet(
+            sheetState = preferencesSheetState,
+            onDismissRequest = {
+                showPreferences.value = false
+            }
+        ) {
+            val preferencesEditor = readerState.preferencesEditor.collectAsState()
+
+            UserPreferences(
+                editor = preferencesEditor.value,
+                title = "Preferences"
+            )
+        }
+    }
+
+    val showOutline = rememberSaveable { mutableStateOf(false) }
+
+    if (showOutline.value) {
+        Outline(
+            modifier = Modifier
+                .zIndex(1f)
+                .fillMaxSize(),
+            publication = readerState.publication,
+            onBackActivated = {
+                showOutline.value = false
+            },
+            onTocItemActivated = {
+                readerState.navigator.goTo(it)
+                showOutline.value = false
+            }
+        )
+    }
+
     Scaffold(
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier.fillMaxSize(),
+        topBar = {
+            RenditionTopBar(
+                modifier = Modifier.zIndex(10f),
+                visible = true,
+                onPreferencesActivated = { showPreferences.value = !showPreferences.value },
+                onOutlineActivated = { showOutline.value = !showOutline.value }
+            )
+        }
     ) { contentPadding ->
         Column(
             modifier = Modifier

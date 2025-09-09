@@ -9,6 +9,8 @@
 package org.readium.navigator.media.readaloud
 
 import kotlin.properties.Delegates
+import org.readium.navigator.media.readaloud.StateMachine.PlaybackState
+import org.readium.navigator.media.readaloud.StateMachine.State
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.util.Error
 
@@ -21,10 +23,10 @@ internal class TtsPlayer<E : Error>(
 
         fun onItemChanged(player: TtsPlayer<E>, index: Int)
 
-        fun onStateChanged(player: TtsPlayer<E>, state: State)
+        fun onStateChanged(player: TtsPlayer<E>, state: TtsPlayer.PlaybackState)
     }
 
-    internal enum class State {
+    internal enum class PlaybackState {
         Ready,
         Starved,
         Ended,
@@ -58,19 +60,20 @@ internal class TtsPlayer<E : Error>(
     private val stateMachine = StateMachine<E>(ttsEngine)
 
     private var state by Delegates.observable(
-        StateMachine.start(playWhenReady = false)
+        State(
+            playWhenReady = false,
+            playbackState = StateMachine.PlaybackState.Starved,
+            indexToPlay = 0,
+            lastSubmittedIndex = null
+        )
     ) { property, oldValue, newValue ->
         if (oldValue.playbackState != newValue.playbackState) {
-            val state = when (newValue.playbackState) {
-                StateMachine.PlaybackState.Ended -> State.Ended
-                StateMachine.PlaybackState.Ready -> State.Ready
-                StateMachine.PlaybackState.Starved -> State.Starved
-            }
-            listener.onStateChanged(this, state)
+            val playerState = newValue.playbackState.toPlayerPlaybackState()
+            listener.onStateChanged(this, playerState)
         }
 
-        if (oldValue.index != newValue.index) {
-            listener.onItemChanged(this, newValue.index)
+        if (oldValue.indexToPlay != newValue.indexToPlay) {
+            listener.onItemChanged(this, newValue.indexToPlay)
         }
     }
 
@@ -81,6 +84,21 @@ internal class TtsPlayer<E : Error>(
                 state = if (value) state.resume() else state.pause()
             }
         }
+
+    var pitch: Double
+        get() = ttsEngine.pitch
+        set(value) {
+            ttsEngine.pitch = value
+        }
+
+    var speed: Double
+        get() = ttsEngine.speed
+        set(value) {
+            ttsEngine.speed = value
+        }
+
+    val playbackState: TtsPlayer.PlaybackState get() =
+        state.playbackState.toPlayerPlaybackState()
 
     fun prepare() {
         ttsEngine.prepare()
@@ -97,6 +115,13 @@ internal class TtsPlayer<E : Error>(
     }
 }
 
+private fun StateMachine.PlaybackState.toPlayerPlaybackState() =
+    when (this) {
+        PlaybackState.Ended -> TtsPlayer.PlaybackState.Ended
+        PlaybackState.Ready -> TtsPlayer.PlaybackState.Ready
+        PlaybackState.Starved -> TtsPlayer.PlaybackState.Starved
+    }
+
 private class StateMachine<E : Error>(
     private val engine: PausableTtsEngine,
 ) {
@@ -112,19 +137,9 @@ private class StateMachine<E : Error>(
     data class State(
         val playbackState: PlaybackState,
         val playWhenReady: Boolean,
-        val index: Int,
+        val indexToPlay: Int,
+        val lastSubmittedIndex: Int?,
     )
-
-    companion object {
-
-        fun start(playWhenReady: Boolean): State {
-            return State(
-                playWhenReady = playWhenReady,
-                playbackState = PlaybackState.Starved,
-                index = 0
-            )
-        }
-    }
 
     fun State.pause(): State {
         engine.pause()
@@ -132,22 +147,31 @@ private class StateMachine<E : Error>(
     }
 
     fun State.resume(): State {
-        engine.resume()
-        return copy(playWhenReady = true)
+        if (lastSubmittedIndex == indexToPlay) {
+            engine.resume()
+        } else {
+            engine.stop()
+            engine.speak(indexToPlay)
+        }
+
+        return copy(playWhenReady = true, lastSubmittedIndex = indexToPlay)
     }
 
     fun State.seekTo(index: Int): State {
         if (playWhenReady) {
             engine.stop()
             engine.speak(index)
+            return copy(indexToPlay = index, lastSubmittedIndex = index)
+        } else {
+            return copy(indexToPlay = index)
         }
-        return copy(index = index)
     }
 
     fun State.onUtteranceCompleted(): State {
-        if (index < engine.utterances.size - 1) {
-            engine.speak(index + 1)
-            return copy(index = index + 1)
+        if (indexToPlay < engine.utterances.size - 1) {
+            val newIndexToPlay = indexToPlay + 1
+            engine.speak(newIndexToPlay)
+            return copy(indexToPlay = newIndexToPlay, lastSubmittedIndex = newIndexToPlay)
         } else {
             return copy(playbackState = PlaybackState.Ended)
         }
@@ -155,8 +179,8 @@ private class StateMachine<E : Error>(
 
     fun State.onEngineReady(): State {
         if (playWhenReady) {
-            engine.speak(index)
+            engine.speak(indexToPlay)
         }
-        return copy(playbackState = PlaybackState.Ready)
+        return copy(playbackState = PlaybackState.Ready, lastSubmittedIndex = indexToPlay)
     }
 }

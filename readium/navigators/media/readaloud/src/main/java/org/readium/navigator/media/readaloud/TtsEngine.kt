@@ -39,6 +39,10 @@ public interface TtsEngine {
 
     public val utterances: List<String>
 
+    public var pitch: Double
+
+    public var speed: Double
+
     public fun prepare()
 
     public fun speak(utteranceIndex: Int)
@@ -51,6 +55,7 @@ public interface TtsEngine {
 @ExperimentalReadiumApi
 public interface TtsVoice {
 
+    @kotlinx.serialization.Serializable
     @JvmInline
     public value class Id(public val value: String)
 

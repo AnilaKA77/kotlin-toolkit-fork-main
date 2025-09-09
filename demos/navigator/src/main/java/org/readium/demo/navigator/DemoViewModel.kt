@@ -124,19 +124,21 @@ class DemoViewModel(
                     configuration = fixedConfig
                 )?.let { SelectNavigatorItem.FixedWeb(it) }
 
-            val readAloudFactory = run {
-                val ttsEngineProvider =
-                    AndroidTtsEngineProvider(application)
-                        ?.takeIf { it.voices.isNotEmpty() }
-                        ?: return@run null
+            val ttsEngineProvider =
+                AndroidTtsEngineProvider(application)
+                    ?.takeIf { it.voices.isNotEmpty() }
 
-                ReadAloudNavigatorFactory(
-                    application = application,
-                    publication = publication,
-                    audioEngineProvider = audioEngineProvider,
-                    ttsEngineProvider = ttsEngineProvider
-                )?.let { SelectNavigatorItem.ReadAloud(it) }
-            }
+            val readAloudFactory = ttsEngineProvider
+                ?.let {
+                    ReadAloudNavigatorFactory(
+                        application = application,
+                        publication = publication,
+                        audioEngineProvider = audioEngineProvider,
+                        ttsEngineProvider = ttsEngineProvider
+                    )
+                }?.let {
+                    SelectNavigatorItem.ReadAloud(factory = it, ttsEngineProvider = ttsEngineProvider)
+                }
 
             val factories = listOfNotNull(
                 reflowableFactory,

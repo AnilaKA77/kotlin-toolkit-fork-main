@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.window.PopupProperties
 import org.readium.navigator.media.readaloud.AndroidTtsEngine
 import org.readium.navigator.media.readaloud.ReadAloudNavigatorFactory
+import org.readium.navigator.media.readaloud.TtsEngineProvider
 import org.readium.navigator.web.fixedlayout.FixedWebRenditionFactory
 import org.readium.navigator.web.reflowable.ReflowableWebRenditionFactory
 import org.readium.r2.shared.ExperimentalReadiumApi
@@ -50,6 +51,7 @@ sealed class SelectNavigatorItem(
 
     data class ReadAloud(
         override val factory: ReadAloudNavigatorFactory<AndroidTtsEngine.Voice, AndroidTtsEngine.Error>,
+        val ttsEngineProvider: TtsEngineProvider<AndroidTtsEngine.Voice, AndroidTtsEngine.Error>,
     ) : SelectNavigatorItem("Read Aloud Navigator")
 }
 

@@ -13,9 +13,21 @@ import org.readium.r2.shared.util.Error
 
 internal sealed interface SegmentPlayer {
 
+    enum class PlaybackState {
+        Ready,
+        Starved,
+        Ended,
+    }
+
     val player: Any
 
     var playWhenReady: Boolean
+
+    var pitch: Double
+
+    var speed: Double
+
+    val playbackState: PlaybackState
 
     fun prepare()
 
@@ -32,6 +44,24 @@ internal class TtsSegmentPlayer<E : Error>(
         get() = player.playWhenReady
         set(value) {
             player.playWhenReady = value
+        }
+    override var pitch: Double
+        get() = player.pitch
+        set(value) {
+            player.pitch = value
+        }
+
+    override var speed: Double
+        get() = player.speed
+        set(value) {
+            player.speed = value
+        }
+
+    override val playbackState: SegmentPlayer.PlaybackState
+        get() = when (player.playbackState) {
+            TtsPlayer.PlaybackState.Ready -> SegmentPlayer.PlaybackState.Ready
+            TtsPlayer.PlaybackState.Starved -> SegmentPlayer.PlaybackState.Starved
+            TtsPlayer.PlaybackState.Ended -> SegmentPlayer.PlaybackState.Ended
         }
 
     override fun prepare() {
@@ -55,6 +85,25 @@ internal class AudioSegmentPlayer(
         get() = player.playWhenReady
         set(value) {
             player.playWhenReady = value
+        }
+
+    override var pitch: Double
+        get() = player.pitch
+        set(value) {
+            player.pitch = value
+        }
+
+    override var speed: Double
+        get() = player.speed
+        set(value) {
+            player.speed = value
+        }
+
+    override val playbackState: SegmentPlayer.PlaybackState
+        get() = when (player.playbackState) {
+            AudioEngine.PlaybackState.Ready -> SegmentPlayer.PlaybackState.Ready
+            AudioEngine.PlaybackState.Starved -> SegmentPlayer.PlaybackState.Starved
+            AudioEngine.PlaybackState.Ended -> SegmentPlayer.PlaybackState.Ended
         }
 
     override fun prepare() {

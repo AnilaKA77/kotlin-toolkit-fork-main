@@ -9,6 +9,7 @@
 package org.readium.navigator.media.readaloud
 
 import kotlin.properties.Delegates
+import org.readium.navigator.media.readaloud.preferences.ReadAloudSettings
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.util.Error
 
@@ -31,22 +32,26 @@ internal class ReadAloudDataLoader<E : Error>(
         val nextNode = node.next() ?: return
 
         if (nextNode !in preloadedRefs) {
-            loadSegmentForNode(nextNode)?.player?.prepare()
+            // loadSegmentForNode(nextNode, true)
         }
     }
 
-    fun getItemRef(node: ReadAloudNode): ItemRef? {
-        loadSegmentForNode(node)
+    fun getItemRef(node: ReadAloudNode, prepare: Boolean = true): ItemRef? {
+        loadSegmentForNode(node, prepare)
         return preloadedRefs[node]
     }
 
-    private fun loadSegmentForNode(node: ReadAloudNode): ReadAloudSegment? {
+    private fun loadSegmentForNode(node: ReadAloudNode, prepare: Boolean): ReadAloudSegment? {
         if (node in preloadedRefs) {
             return null
         }
 
         val segment = segmentFactory.createSegmentFromNode(node)
             ?: return null // Ended
+
+        if (prepare) {
+            segment.player.prepare()
+        }
 
         val refs = computeRefsForSegment(segment)
         preloadedRefs.putAll(refs)

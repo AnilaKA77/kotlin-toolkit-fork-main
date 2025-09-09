@@ -7,8 +7,13 @@
 package org.readium.navigator.media.readaloud
 
 import android.app.Application
+import org.readium.navigator.media.readaloud.preferences.ReadAloudDefaults
+import org.readium.navigator.media.readaloud.preferences.ReadAloudPreferences
+import org.readium.navigator.media.readaloud.preferences.ReadAloudPreferencesEditor
+import org.readium.navigator.media.readaloud.preferences.ReadAloudSettings
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.guided.GuidedNavigationObject
+import org.readium.r2.shared.publication.Metadata
 import org.readium.r2.shared.publication.Publication
 import org.readium.r2.shared.publication.epub.MediaOverlaysService
 import org.readium.r2.shared.publication.services.GuidedNavigationService
@@ -20,6 +25,7 @@ import org.readium.r2.shared.util.getOrElse
 
 @ExperimentalReadiumApi
 public class ReadAloudNavigatorFactory<V : TtsVoice, E : BaseError> private constructor(
+    private val publicationMetadata: Metadata,
     private val guidedNavigationService: GuidedNavigationService,
     private val resources: List<ReadAloudPublication.Item>,
     private val audioEngineFactory: (List<AudioEngine.Item>, AudioEngine.Listener) -> AudioEngine,
@@ -65,6 +71,7 @@ public class ReadAloudNavigatorFactory<V : TtsVoice, E : BaseError> private cons
             }
 
             return ReadAloudNavigatorFactory(
+                publicationMetadata = publication.metadata,
                 guidedNavigationService = guidedNavService,
                 resources = resources,
                 audioEngineFactory = audioEngineFactory,
@@ -125,4 +132,14 @@ public class ReadAloudNavigatorFactory<V : TtsVoice, E : BaseError> private cons
 
         return Try.success(navigator)
     }
+
+    public fun createPreferencesEditor(
+        initialPreferences: ReadAloudPreferences,
+        defaults: ReadAloudDefaults = ReadAloudDefaults(),
+    ): ReadAloudPreferencesEditor =
+        ReadAloudPreferencesEditor(
+            initialPreferences,
+            publicationMetadata,
+            defaults,
+        )
 }

@@ -10,7 +10,9 @@ package org.readium.demo.navigator.reader
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.StateFlow
 import org.readium.demo.navigator.decorations.HighlightsManager
+import org.readium.demo.navigator.preferences.ReadAloudPreferencesEditor
 import org.readium.navigator.common.ExportableLocation
 import org.readium.navigator.common.GoLocation
 import org.readium.navigator.common.NavigationController
@@ -48,8 +50,10 @@ data class VisualReaderState<L : ExportableLocation, G : GoLocation, S : Selecti
 
 data class ReadAloudReaderState(
     val url: AbsoluteUrl,
+    val coroutineScope: CoroutineScope,
     val publication: Publication,
     val navigator: ReadAloudNavigator<AndroidTtsEngine.Voice, AndroidTtsEngine.Error>,
+    val preferencesEditor: StateFlow<ReadAloudPreferencesEditor>,
 ) : ReaderState {
 
     override fun close() {

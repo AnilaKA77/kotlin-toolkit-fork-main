@@ -6,9 +6,12 @@
 
 package org.readium.r2.shared.guided
 
+import kotlinx.serialization.Serializable
+
 /**
  * A role usable in a guided navigation object.
  */
+@Serializable
 @JvmInline
 public value class GuidedNavigationRole(public val value: String) {
 
@@ -78,14 +81,5 @@ public value class GuidedNavigationRole(public val value: String) {
         public val LOI: GuidedNavigationRole = GuidedNavigationRole("loi")
         public val LOT: GuidedNavigationRole = GuidedNavigationRole("lot")
         public val LOV: GuidedNavigationRole = GuidedNavigationRole("lov")
-
-        public val SKIPPABLE_ROLES: List<GuidedNavigationRole> =
-            listOf(
-                ASIDE, BIBLIOGRAPHY, ENDNOTES, FOOTNOTE, NOTEREF, PULLQUOTE,
-                LANDMARKS, LOA, LOI, LOT, LOV, PAGEBREAK, TOC
-            )
-
-        public val ESCAPABLE_ROLES: List<GuidedNavigationRole> =
-            listOf(ASIDE, FIGURE, LIST, LIST_ITEM, TABLE, ROW, CELL)
     }
 }

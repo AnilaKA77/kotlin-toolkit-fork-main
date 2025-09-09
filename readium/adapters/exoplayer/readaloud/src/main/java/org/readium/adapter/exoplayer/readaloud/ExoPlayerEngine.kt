@@ -74,13 +74,8 @@ public class ExoPlayerEngine private constructor(
 
         override fun onEvents(player: Player, events: Player.Events) {
             if (events.contains(Player.EVENT_PLAYBACK_STATE_CHANGED)) {
-                val newState = when (player.playbackState) {
-                    Player.STATE_READY -> AudioEngine.State.Ready
-                    Player.STATE_BUFFERING -> AudioEngine.State.Starved
-                    Player.STATE_ENDED -> AudioEngine.State.Ended
-                    else -> null
-                }
-                newState?.let { this@ExoPlayerEngine.listener.onStateChanged(this@ExoPlayerEngine, it) }
+                val newState = player.getEnginePlaybackState()
+                newState.let { this@ExoPlayerEngine.listener.onStateChanged(this@ExoPlayerEngine, it) }
             }
 
             if (events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION)) {
@@ -131,6 +126,23 @@ public class ExoPlayerEngine private constructor(
             exoPlayer.playWhenReady = value
         }
 
+    override val playbackState: AudioEngine.PlaybackState
+        get() = exoPlayer.getEnginePlaybackState()
+
+    override var pitch: Double
+        get() = exoPlayer.playbackParameters.pitch.toDouble()
+        set(value) {
+            exoPlayer.playbackParameters =
+                exoPlayer.playbackParameters.withPitch(value.toFloat())
+        }
+
+    override var speed: Double
+        get() = exoPlayer.playbackParameters.speed.toDouble()
+        set(value) {
+            exoPlayer.playbackParameters =
+                exoPlayer.playbackParameters.withSpeed(value.toFloat())
+        }
+
     public override fun release() {
         coroutineScope.cancel()
         exoPlayer.release()
@@ -151,4 +163,12 @@ public class ExoPlayerEngine private constructor(
             Error.Source(readError)
         }
     }
+
+    private fun Player.getEnginePlaybackState(): AudioEngine.PlaybackState =
+        when (playbackState) {
+            Player.STATE_READY -> AudioEngine.PlaybackState.Ready
+            Player.STATE_BUFFERING, Player.STATE_IDLE -> AudioEngine.PlaybackState.Starved
+            Player.STATE_ENDED -> AudioEngine.PlaybackState.Ended
+            else -> throw IllegalStateException("Unexpected ExoPlayer state $playbackState")
+        }
 }

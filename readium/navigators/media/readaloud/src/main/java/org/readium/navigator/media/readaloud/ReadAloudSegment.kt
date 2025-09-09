@@ -43,19 +43,17 @@ internal data class TtsSegment<E : Error>(
 ) : ReadAloudSegment
 
 internal class ReadAloudSegmentFactory<E : Error>(
-    private val audioEngineFactory: (List<AudioEngine.Item>) -> AudioEngine,
-    private val ttsPlayerFactory: (Language?, List<String>) -> TtsPlayer<E>,
+    private val audioEngineFactory: (List<AudioEngine.Item>) -> AudioEngine?,
+    private val ttsPlayerFactory: (Language?, List<String>) -> TtsPlayer<E>?,
 ) {
 
     fun createSegmentFromNode(node: ReadAloudNode): ReadAloudSegment? =
         createAudioSegmentFromNode(node)
-            .takeUnless { it.items.isEmpty() }
             ?: createTtsSegmentFromNode(node)
-                .takeUnless { it.items.isEmpty() }
 
     private fun createAudioSegmentFromNode(
         firstNode: ReadAloudNode,
-    ): AudioSegment {
+    ): AudioSegment? {
         var nextNode: ReadAloudNode? = firstNode
         val audioItems = mutableListOf<AudioEngine.Item>()
         val textRefs = mutableListOf<Url>()
@@ -76,7 +74,13 @@ internal class ReadAloudSegmentFactory<E : Error>(
             nextNode = nextNode.next()
         }
 
+        if (audioItems.isEmpty()) {
+            return null
+        }
+
         val audioEngine = audioEngineFactory(audioItems)
+            ?: return null
+
         audioEngine.playWhenReady = false
 
         return AudioSegment(
@@ -90,7 +94,7 @@ internal class ReadAloudSegmentFactory<E : Error>(
 
     private fun createTtsSegmentFromNode(
         firstNode: ReadAloudNode,
-    ): TtsSegment<E> {
+    ): TtsSegment<E>? {
         var nextNode: ReadAloudNode? = firstNode
         val segmentLanguage = firstNode.text?.language
         val textItems = mutableListOf<GuidedNavigationText>()
@@ -114,9 +118,14 @@ internal class ReadAloudSegmentFactory<E : Error>(
             nextNode = nextNode.next()
         }
 
+        if (textItems.isEmpty()) {
+            return null
+        }
+
         val utterances = textItems.map { it.plain!! }
 
         val ttsPlayer = ttsPlayerFactory(segmentLanguage, utterances)
+            ?: return null
 
         return TtsSegment(
             player = TtsSegmentPlayer(ttsPlayer),

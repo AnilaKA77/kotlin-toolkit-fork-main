@@ -8,6 +8,7 @@
 
 package org.readium.navigator.media.readaloud
 
+import org.readium.navigator.media.readaloud.preferences.ReadAloudSettings
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.guided.GuidedNavigationAudioRef
 
