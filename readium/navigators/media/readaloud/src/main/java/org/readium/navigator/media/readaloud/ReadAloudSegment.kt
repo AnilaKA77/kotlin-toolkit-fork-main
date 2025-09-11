@@ -22,29 +22,29 @@ internal sealed interface ReadAloudSegment {
 
     val nodes: List<ReadAloudNode>
 
-    val player: SegmentPlayer
+    val player: PlaybackEngine
 
     val emptyNodes: Set<ReadAloudNode>
 }
 
 internal data class AudioSegment(
-    override val player: AudioSegmentPlayer,
-    val items: List<AudioEngine.Item>,
+    override val player: PlaybackEngine,
+    val items: List<AudioChunk>,
     val textRefs: List<Url>,
     override val nodes: List<ReadAloudNode>,
     override val emptyNodes: Set<ReadAloudNode>,
 ) : ReadAloudSegment
 
 internal data class TtsSegment<E : Error>(
-    override val player: TtsSegmentPlayer<E>,
+    override val player: PlaybackEngine,
     val items: List<GuidedNavigationText>,
     override val nodes: List<ReadAloudNode>,
     override val emptyNodes: Set<ReadAloudNode>,
 ) : ReadAloudSegment
 
 internal class ReadAloudSegmentFactory<E : Error>(
-    private val audioEngineFactory: (List<AudioEngine.Item>) -> AudioEngine?,
-    private val ttsPlayerFactory: (Language?, List<String>) -> TtsPlayer<E>?,
+    private val audioEngineFactory: (List<AudioChunk>) -> PlaybackEngine?,
+    private val ttsEngineFactory: (Language?, List<String>) -> PlaybackEngine?,
 ) {
 
     fun createSegmentFromNode(node: ReadAloudNode): ReadAloudSegment? =
@@ -55,7 +55,7 @@ internal class ReadAloudSegmentFactory<E : Error>(
         firstNode: ReadAloudNode,
     ): AudioSegment? {
         var nextNode: ReadAloudNode? = firstNode
-        val audioItems = mutableListOf<AudioEngine.Item>()
+        val audioChunks = mutableListOf<AudioChunk>()
         val textRefs = mutableListOf<Url>()
         val nodes = mutableListOf<ReadAloudNode>()
         val emptyNodes = mutableSetOf<ReadAloudNode>()
@@ -64,7 +64,7 @@ internal class ReadAloudSegmentFactory<E : Error>(
             val audioContent = (nextNode.content as? AudioContent)
 
             if (audioContent != null) {
-                audioItems.add(audioContent.toAudioItem())
+                audioChunks.add(audioContent.toAudioItem())
                 nodes.add(nextNode)
                 textRefs.add(audioContent.textRef)
             } else {
@@ -74,18 +74,16 @@ internal class ReadAloudSegmentFactory<E : Error>(
             nextNode = nextNode.next()
         }
 
-        if (audioItems.isEmpty()) {
+        if (audioChunks.isEmpty()) {
             return null
         }
 
-        val audioEngine = audioEngineFactory(audioItems)
+        val audioEngine = audioEngineFactory(audioChunks)
             ?: return null
 
-        audioEngine.playWhenReady = false
-
         return AudioSegment(
-            player = AudioSegmentPlayer(audioEngine),
-            items = audioItems,
+            player = audioEngine,
+            items = audioChunks,
             textRefs = textRefs,
             nodes = nodes,
             emptyNodes = emptyNodes
@@ -124,11 +122,11 @@ internal class ReadAloudSegmentFactory<E : Error>(
 
         val utterances = textItems.map { it.plain!! }
 
-        val ttsPlayer = ttsPlayerFactory(segmentLanguage, utterances)
+        val ttsPlayer = ttsEngineFactory(segmentLanguage, utterances)
             ?: return null
 
         return TtsSegment(
-            player = TtsSegmentPlayer(ttsPlayer),
+            player = ttsPlayer,
             items = textItems,
             nodes = nodes,
             emptyNodes = emptyNodes
@@ -178,8 +176,8 @@ private data class TextContent(
     val text: GuidedNavigationText,
 ) : NodeContent
 
-private fun AudioContent.toAudioItem(): AudioEngine.Item {
-    return AudioEngine.Item(
+private fun AudioContent.toAudioItem(): AudioChunk {
+    return AudioChunk(
         href = href,
         interval = interval
     )

@@ -4,28 +4,41 @@
  * available in the top-level LICENSE file of the project.
  */
 
+@file:OptIn(InternalReadiumApi::class)
+
 package org.readium.adapter.exoplayer.readaloud
 
 import android.app.Application
 import org.readium.adapter.exoplayer.audio.ExoPlayerDataSource
-import org.readium.navigator.media.readaloud.AudioEngine
+import org.readium.navigator.media.readaloud.AudioChunk
+import org.readium.navigator.media.readaloud.AudioEngineFactory
 import org.readium.navigator.media.readaloud.AudioEngineProvider
+import org.readium.navigator.media.readaloud.PlaybackEngine
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.InternalReadiumApi
 import org.readium.r2.shared.publication.Publication
 
-@OptIn(InternalReadiumApi::class)
 @ExperimentalReadiumApi
 public class ExoPlayerEngineProvider(
     private val application: Application,
 ) : AudioEngineProvider {
 
-    override fun createEngine(
-        publication: Publication,
-        playlist: List<AudioEngine.Item>,
-        listener: AudioEngine.Listener,
-    ): ExoPlayerEngine {
+    override fun createEngineFactory(publication: Publication): AudioEngineFactory {
         val dataSourceFactory = ExoPlayerDataSource.Factory(publication)
-        return ExoPlayerEngine(application, dataSourceFactory, playlist, listener)
+        return ExoPlayerEngineFactory(application, dataSourceFactory)
+    }
+}
+
+@ExperimentalReadiumApi
+public class ExoPlayerEngineFactory internal constructor(
+    private val application: Application,
+    private val dataSourceFactory: ExoPlayerDataSource.Factory,
+) : AudioEngineFactory {
+
+    override fun createPlaybackEngine(
+        chunks: List<AudioChunk>,
+        listener: PlaybackEngine.Listener,
+    ): PlaybackEngine {
+        return ExoPlayerEngine(application, dataSourceFactory, chunks, listener)
     }
 }

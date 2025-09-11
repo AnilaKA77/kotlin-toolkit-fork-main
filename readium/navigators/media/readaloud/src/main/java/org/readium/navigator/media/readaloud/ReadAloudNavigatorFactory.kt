@@ -28,7 +28,7 @@ public class ReadAloudNavigatorFactory<V : TtsVoice, E : BaseError> private cons
     private val publicationMetadata: Metadata,
     private val guidedNavigationService: GuidedNavigationService,
     private val resources: List<ReadAloudPublication.Item>,
-    private val audioEngineFactory: (List<AudioEngine.Item>, AudioEngine.Listener) -> AudioEngine,
+    private val audioEngineFactory: AudioEngineFactory,
     private val ttsEngineProvider: TtsEngineProvider<V, E>,
 ) {
 
@@ -59,9 +59,7 @@ public class ReadAloudNavigatorFactory<V : TtsVoice, E : BaseError> private cons
                 return null
             }
 
-            val audioEngineFactory = { playlist: List<AudioEngine.Item>, listener: AudioEngine.Listener ->
-                audioEngineProvider.createEngine(publication, playlist, listener)
-            }
+            val audioEngineFactory = audioEngineProvider.createEngineFactory(publication)
 
             val resources = (publication.readingOrder + publication.resources).map {
                 ReadAloudPublication.Item(
@@ -122,12 +120,14 @@ public class ReadAloudNavigatorFactory<V : TtsVoice, E : BaseError> private cons
             resources = resources,
         )
 
+        val ttsEngineFactory = ttsEngineProvider.createEngineFactory()
+
         val navigator = ReadAloudNavigator(
             initialSettings = initialSettings,
             initialLocation = initialLocation,
             publication = navigatorPublication,
             audioEngineFactory = audioEngineFactory,
-            ttsEngineProvider = ttsEngineProvider
+            ttsEngineFactory = ttsEngineFactory
         )
 
         return Try.success(navigator)

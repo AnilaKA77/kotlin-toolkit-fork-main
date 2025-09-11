@@ -32,27 +32,32 @@ internal class ReadAloudStateMachine<E : Error>(
         val playbackState: PlaybackState,
         val playWhenReady: Boolean,
         val node: ReadAloudNode,
-        val index: Int,
+        val nodeIndex: Int,
+        val playerPaused: Boolean,
         val segment: ReadAloudSegment,
         val settings: ReadAloudSettings,
     )
 
-    fun init(
+    fun play(
         segment: ReadAloudSegment,
         itemIndex: Int,
         playWhenReady: Boolean,
         settings: ReadAloudSettings,
     ): State {
-        segment.player.seekTo(itemIndex)
-        segment.player.playWhenReady = playWhenReady
-        segment.player.speed = settings.speed
-        segment.player.pitch = settings.pitch
+        segment.player.stop()
+        segment.player.itemToPlay = itemIndex
+        segment.applySettings(settings)
+
+        if (playWhenReady) {
+            segment.player.start()
+        }
 
         return State(
-            playbackState = segment.player.playbackState.toStateMachinePlaybackState(),
+            playbackState = PlaybackState.Ready,
             playWhenReady = playWhenReady,
             node = segment.nodes[itemIndex],
-            index = itemIndex,
+            nodeIndex = itemIndex,
+            playerPaused = false,
             segment = segment,
             settings = settings
         )
@@ -72,7 +77,7 @@ internal class ReadAloudStateMachine<E : Error>(
         }
 
         val index = itemRef.nodeIndex!! // This is a content node
-        return init(itemRef.segment, index, playWhenReady, settings)
+        return play(itemRef.segment, index, playWhenReady, settings)
     }
 
     fun State.restart(): State {
@@ -81,59 +86,65 @@ internal class ReadAloudStateMachine<E : Error>(
         val itemRef = dataLoader.getItemRef(node)
             ?: return copy(playbackState = PlaybackState.Ended)
 
-        return init(itemRef.segment, index, playWhenReady, settings)
+        val nodeIndex = itemRef.nodeIndex!!
+
+        return play(itemRef.segment, nodeIndex, playWhenReady, settings)
     }
 
     fun State.pause(): State {
-        segment.player.playWhenReady = false
-        return copy(playWhenReady = false)
+        segment.player.pause()
+        return copy(playWhenReady = false, playerPaused = true)
     }
 
     fun State.resume(): State {
-        segment.player.playWhenReady = true
-        return copy(playWhenReady = true)
+        if (playerPaused) {
+            segment.player.resume()
+        } else {
+            segment.player.start()
+        }
+        return copy(playWhenReady = true, playerPaused = false)
     }
 
-    fun State.updateSettings(
-        oldSettings: ReadAloudSettings,
+    fun State.onSettingsChanged(
         newSettings: ReadAloudSettings,
     ): State {
         navigationHelper.settings = newSettings
         dataLoader.settings = newSettings
 
-        segment.player.pitch = settings.pitch
-        segment.player.speed = settings.speed
-
         return copy(settings = newSettings).restart()
     }
 
-    fun State.onAudioEngineStateChanged(audioEngineState: AudioEngine.PlaybackState): State {
-        return when (audioEngineState) {
-            AudioEngine.PlaybackState.Ready -> copy(playbackState = PlaybackState.Ready)
-            AudioEngine.PlaybackState.Starved -> copy(playbackState = PlaybackState.Starved)
-            AudioEngine.PlaybackState.Ended -> onSegmentPlaybackEnded()
-        }
+    private fun ReadAloudSegment.applySettings(settings: ReadAloudSettings) {
+        player.speed = settings.speed
+        player.pitch = settings.pitch
     }
 
-    fun State.onTtsPlayerStateChanged(state: TtsPlayer.PlaybackState): State {
+    fun State.onPlaybackEngineStateChanged(state: PlaybackEngine.PlaybackState): State {
         return when (state) {
-            TtsPlayer.PlaybackState.Ready -> copy(playbackState = PlaybackState.Ready)
-            TtsPlayer.PlaybackState.Starved -> copy(playbackState = PlaybackState.Starved)
-            TtsPlayer.PlaybackState.Ended -> onSegmentPlaybackEnded()
+            PlaybackEngine.PlaybackState.Playing ->
+                copy(playbackState = PlaybackState.Ready)
+            PlaybackEngine.PlaybackState.Starved ->
+                copy(playbackState = PlaybackState.Starved)
         }
     }
 
-    fun State.onAudioEngineItemChanged(item: Int): State {
-        dataLoader.onPlaybackProgressed(segment.nodes[item])
-        return copy(node = segment.nodes[item], index = item)
+    fun State.onPlaybackCompleted(): State {
+        return if (nodeIndex + 1 < segment.nodes.size) {
+            setSegmentItem(index = nodeIndex + 1, playWhenReady = playWhenReady && settings.readContinuously)
+        } else {
+            onSegmentEnded()
+        }
     }
 
-    fun State.onTtsPlayerItemChanged(item: Int): State {
-        dataLoader.onPlaybackProgressed(segment.nodes[item])
-        return copy(node = segment.nodes[item], index = item)
+    private fun State.setSegmentItem(index: Int, playWhenReady: Boolean): State {
+        segment.player.itemToPlay = index
+        if (playWhenReady) {
+            segment.player.start()
+        }
+        return copy(nodeIndex = index, node = segment.nodes[index], playWhenReady = playWhenReady)
     }
 
-    private fun State.onSegmentPlaybackEnded(): State {
+    private fun State.onSegmentEnded(): State {
         val nextNode = node.next()
             ?: return copy(playbackState = PlaybackState.Ended)
 
@@ -142,22 +153,8 @@ internal class ReadAloudStateMachine<E : Error>(
 
         segment.player.release()
 
-        newSegment.player.playWhenReady = playWhenReady
-        newSegment.player.speed = settings.speed
-        newSegment.player.pitch = settings.pitch
+        val playWhenReady = settings.readContinuously
 
-        return copy(
-            segment = newSegment,
-            playbackState = segment.player.playbackState.toStateMachinePlaybackState(),
-            node = newSegment.nodes[0],
-            index = 0
-        )
+        return play(newSegment, 0, playWhenReady, settings)
     }
 }
-
-private fun SegmentPlayer.PlaybackState.toStateMachinePlaybackState() =
-    when (this) {
-        SegmentPlayer.PlaybackState.Ready -> ReadAloudStateMachine.PlaybackState.Ready
-        SegmentPlayer.PlaybackState.Starved -> ReadAloudStateMachine.PlaybackState.Starved
-        SegmentPlayer.PlaybackState.Ended -> ReadAloudStateMachine.PlaybackState.Ended
-    }

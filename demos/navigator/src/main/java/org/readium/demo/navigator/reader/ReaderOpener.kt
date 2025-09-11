@@ -33,9 +33,8 @@ import org.readium.navigator.common.DecorationLocation
 import org.readium.navigator.common.PreferencesEditor
 import org.readium.navigator.common.Settings
 import org.readium.navigator.common.SettingsController
-import org.readium.navigator.media.readaloud.AndroidTtsEngine
 import org.readium.navigator.media.readaloud.ReadAloudNavigatorFactory
-import org.readium.navigator.media.readaloud.TtsEngineProvider
+import org.readium.navigator.media.readaloud.SystemTtsEngine
 import org.readium.navigator.media.readaloud.preferences.ReadAloudPreferences
 import org.readium.navigator.web.fixedlayout.FixedWebGoLocation
 import org.readium.navigator.web.fixedlayout.FixedWebLocation
@@ -89,7 +88,6 @@ class ReaderOpener(
                     url,
                     publication,
                     selectedNavigator.factory,
-                    selectedNavigator.ttsEngineProvider,
                     initialLocator
                 )
         }.getOrElse { error ->
@@ -207,8 +205,7 @@ class ReaderOpener(
     private suspend fun createReadAloudReader(
         url: AbsoluteUrl,
         publication: Publication,
-        navigatorFactory: ReadAloudNavigatorFactory<AndroidTtsEngine.Voice, AndroidTtsEngine.Error>,
-        ttsEngineProvider: TtsEngineProvider<AndroidTtsEngine.Voice, AndroidTtsEngine.Error>,
+        navigatorFactory: ReadAloudNavigatorFactory<SystemTtsEngine.Voice, SystemTtsEngine.Error>,
         initialLocator: Locator?,
     ): Try<ReadAloudReaderState, Error> {
         val coroutineScope = MainScope()
@@ -217,15 +214,19 @@ class ReaderOpener(
 
         val preferencesManager = PreferencesManager(initialPreferences)
 
+        val initialSettings = navigatorFactory
+            .createPreferencesEditor(preferencesManager.preferences.value)
+            .settings
+
+        val navigator = navigatorFactory.createNavigator(initialSettings)
+            .getOrElse { return Try.failure(it) }
+
         val preferencesEditor = preferencesManager.preferences.mapStateIn(coroutineScope) {
             ReadAloudPreferencesEditor(
                 editor = navigatorFactory.createPreferencesEditor(it),
-                availableVoices = ttsEngineProvider.voices
+                availableVoices = navigator.voices
             )
         }
-
-        val navigator = navigatorFactory.createNavigator(preferencesEditor.value.settings)
-            .getOrElse { return Try.failure(it) }
 
         preferencesEditor
             .flatMapLatest { it.preferencesState }

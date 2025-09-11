@@ -17,11 +17,10 @@ import androidx.media3.datasource.DataSource
 import androidx.media3.exoplayer.ExoPlaybackException
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
-import kotlinx.coroutines.CoroutineScope
+import kotlin.properties.Delegates
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.MainScope
-import kotlinx.coroutines.cancel
-import org.readium.navigator.media.readaloud.AudioEngine
+import org.readium.navigator.media.readaloud.AudioChunk
+import org.readium.navigator.media.readaloud.PlaybackEngine
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.InternalReadiumApi
 import org.readium.r2.shared.extensions.findInstance
@@ -30,24 +29,23 @@ import org.readium.r2.shared.util.data.ReadError
 import org.readium.r2.shared.util.data.ReadException
 
 /**
- * An [AudioEngine] based on Media3 ExoPlayer.
+ * A [PlaybackEngine] based on Media3 ExoPlayer.
  */
 @ExperimentalReadiumApi
 @OptIn(ExperimentalCoroutinesApi::class)
 @androidx.annotation.OptIn(UnstableApi::class)
 public class ExoPlayerEngine private constructor(
     private val exoPlayer: ExoPlayer,
-    override val playlist: List<AudioEngine.Item>,
-    private val listener: AudioEngine.Listener,
-) : AudioEngine {
+    private val listener: PlaybackEngine.Listener,
+) : PlaybackEngine {
 
     public companion object {
 
         public operator fun invoke(
             application: Application,
             dataSourceFactory: DataSource.Factory,
-            playlist: List<AudioEngine.Item>,
-            listener: AudioEngine.Listener,
+            chunks: List<AudioChunk>,
+            listener: PlaybackEngine.Listener,
         ): ExoPlayerEngine {
             val exoPlayer = ExoPlayer.Builder(application)
                 .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
@@ -62,8 +60,23 @@ public class ExoPlayerEngine private constructor(
                 .build()
 
             exoPlayer.preloadConfiguration = ExoPlayer.PreloadConfiguration(10_000_000L)
+            exoPlayer.pauseAtEndOfMediaItems = true
 
-            return ExoPlayerEngine(exoPlayer, playlist, listener)
+            val mediaItems = chunks.map { item ->
+                val clippingConfig = MediaItem.ClippingConfiguration.Builder()
+                    .apply {
+                        item.interval?.start?.let { setStartPositionMs(it.inWholeMilliseconds) }
+                        item.interval?.end?.let { setEndPositionMs(it.inWholeMilliseconds) }
+                    }.build()
+                MediaItem.Builder()
+                    .setUri(item.href.toString())
+                    .setClippingConfiguration(clippingConfig)
+                    .build()
+            }
+            exoPlayer.setMediaItems(mediaItems)
+            exoPlayer.prepare()
+
+            return ExoPlayerEngine(exoPlayer, listener)
         }
     }
 
@@ -72,14 +85,31 @@ public class ExoPlayerEngine private constructor(
         override fun onPlaybackParametersChanged(playbackParameters: PlaybackParameters) {
         }
 
-        override fun onEvents(player: Player, events: Player.Events) {
-            if (events.contains(Player.EVENT_PLAYBACK_STATE_CHANGED)) {
-                val newState = player.getEnginePlaybackState()
-                newState.let { this@ExoPlayerEngine.listener.onStateChanged(this@ExoPlayerEngine, it) }
+        override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+            if (reason == Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM) {
+                state = State.Ended
             }
+        }
 
-            if (events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION)) {
-                this@ExoPlayerEngine.listener.onItemChanged(this@ExoPlayerEngine, player.currentMediaItemIndex)
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            state = when (val stateNow = state) {
+                State.Idle -> {
+                    stateNow
+                }
+                State.Ended -> {
+                    stateNow
+                }
+                is State.Running -> {
+                    when (playbackState) {
+                        Player.STATE_READY ->
+                            stateNow.copy(playbackState = PlaybackEngine.PlaybackState.Playing)
+                        Player.STATE_BUFFERING ->
+                            stateNow.copy(playbackState = PlaybackEngine.PlaybackState.Starved)
+                        Player.STATE_ENDED ->
+                            State.Idle
+                        else -> stateNow
+                    }
+                }
             }
         }
     }
@@ -96,38 +126,17 @@ public class ExoPlayerEngine private constructor(
             Error("An error occurred while trying to read publication content.", cause)
     }
 
-    private val coroutineScope: CoroutineScope =
-        MainScope()
+    private sealed interface State {
 
-    init {
-        exoPlayer.addListener(Listener())
-        val mediaItems = playlist.map { item ->
-            val clippingConfig = MediaItem.ClippingConfiguration.Builder()
-                .apply {
-                    item.interval?.start?.let { setStartPositionMs(it.inWholeMilliseconds) }
-                    item.interval?.end?.let { setEndPositionMs(it.inWholeMilliseconds) }
-                }.build()
-            MediaItem.Builder()
-                .setUri(item.href.toString())
-                .setClippingConfiguration(clippingConfig)
-                .build()
-        }
-        exoPlayer.setMediaItems(mediaItems)
-        exoPlayer.prepare()
+        object Idle : State
+
+        object Ended : State
+
+        data class Running(
+            val playbackState: PlaybackEngine.PlaybackState,
+            val paused: Boolean,
+        ) : State
     }
-
-    override fun seekTo(index: Int) {
-        exoPlayer.seekTo(index, 0L)
-    }
-
-    override var playWhenReady: Boolean
-        get() = exoPlayer.playWhenReady
-        set(value) {
-            exoPlayer.playWhenReady = value
-        }
-
-    override val playbackState: AudioEngine.PlaybackState
-        get() = exoPlayer.getEnginePlaybackState()
 
     override var pitch: Double
         get() = exoPlayer.playbackParameters.pitch.toDouble()
@@ -143,8 +152,85 @@ public class ExoPlayerEngine private constructor(
                 exoPlayer.playbackParameters.withSpeed(value.toFloat())
         }
 
+    override var itemToPlay: Int by Delegates.observable(0) { property, oldValue, newValue ->
+        when (state) {
+            State.Ended -> {
+                if (newValue != exoPlayer.currentMediaItemIndex + 1) {
+                    exoPlayer.seekTo(newValue, 0)
+                }
+            }
+            State.Idle -> {
+                if (newValue != exoPlayer.currentMediaItemIndex) {
+                    exoPlayer.seekTo(newValue, 0)
+                }
+            }
+            is State.Running -> {
+            }
+        }
+    }
+
+    private var state: State by Delegates.observable(State.Idle) { property, oldValue, newValue ->
+        if (newValue != oldValue) {
+            when {
+                newValue is State.Ended -> {
+                    listener.onPlaybackCompleted()
+                }
+                newValue is State.Running && oldValue is State.Running &&
+                    newValue.playbackState != oldValue.playbackState -> {
+                    listener.onPlaybackStateChanged(newValue.playbackState)
+                }
+            }
+        }
+    }
+
+    init {
+        exoPlayer.addListener(Listener())
+    }
+
+    override fun start() {
+        val playbackState = when (exoPlayer.playbackState) {
+            Player.STATE_READY -> PlaybackEngine.PlaybackState.Playing
+            Player.STATE_BUFFERING -> PlaybackEngine.PlaybackState.Starved
+            else -> throw IllegalStateException("Unexpected ExoPlayer state ${exoPlayer.playbackState}")
+        }
+
+        listener.onStartRequested(playbackState)
+        exoPlayer.playWhenReady = true
+        state = State.Running(playbackState = playbackState, paused = false)
+    }
+
+    override fun stop() {
+        exoPlayer.playWhenReady = false
+        exoPlayer.seekTo(0)
+        state = State.Idle
+        listener.onStopRequested()
+    }
+
+    override fun resume() {
+        state = when (val stateNow = state) {
+            State.Idle, State.Ended -> {
+                stateNow
+            }
+            is State.Running -> {
+                exoPlayer.playWhenReady = true
+                stateNow.copy(paused = false)
+            }
+        }
+    }
+
+    override fun pause() {
+        state = when (val stateNow = state) {
+            State.Idle, State.Ended -> {
+                stateNow
+            }
+            is State.Running -> {
+                exoPlayer.playWhenReady = false
+                stateNow.copy(paused = true)
+            }
+        }
+    }
+
     public override fun release() {
-        coroutineScope.cancel()
         exoPlayer.release()
     }
 
@@ -163,12 +249,4 @@ public class ExoPlayerEngine private constructor(
             Error.Source(readError)
         }
     }
-
-    private fun Player.getEnginePlaybackState(): AudioEngine.PlaybackState =
-        when (playbackState) {
-            Player.STATE_READY -> AudioEngine.PlaybackState.Ready
-            Player.STATE_BUFFERING, Player.STATE_IDLE -> AudioEngine.PlaybackState.Starved
-            Player.STATE_ENDED -> AudioEngine.PlaybackState.Ended
-            else -> throw IllegalStateException("Unexpected ExoPlayer state $playbackState")
-        }
 }

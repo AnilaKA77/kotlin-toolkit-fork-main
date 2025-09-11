@@ -28,7 +28,7 @@ import org.readium.demo.navigator.reader.LITERATA
 import org.readium.navigator.common.Preferences
 import org.readium.navigator.common.PreferencesEditor
 import org.readium.navigator.common.Settings
-import org.readium.navigator.media.readaloud.AndroidTtsEngine
+import org.readium.navigator.media.readaloud.SystemTtsEngine
 import org.readium.navigator.web.fixedlayout.preferences.FixedWebPreferencesEditor
 import org.readium.navigator.web.reflowable.preferences.ReflowableWebPreferencesEditor
 import org.readium.r2.navigator.preferences.Axis
@@ -129,7 +129,8 @@ fun <P : Preferences<P>, S : Settings, E : PreferencesEditor<P, S>> UserPreferen
                     language = editor.language,
                     voice = editor.voice,
                     speed = editor.speed,
-                    pitch = editor.pitch
+                    pitch = editor.pitch,
+                    readContinuously = editor.readContinuously
                 )
             }
         }
@@ -499,9 +500,10 @@ private fun ReflowableUserPreferences(
 @Composable
 private fun MediaUserPreferences(
     language: Preference<Language?>? = null,
-    voice: EnumPreference<AndroidTtsEngine.Voice?>? = null,
+    voice: EnumPreference<SystemTtsEngine.Voice?>? = null,
     speed: RangePreference<Double>? = null,
     pitch: RangePreference<Double>? = null,
+    readContinuously: Preference<Boolean>? = null,
 ) {
     Column {
         if (speed != null) {
@@ -528,6 +530,13 @@ private fun MediaUserPreferences(
                 title = "Voice",
                 preference = voice,
                 formatValue = { it?.name ?: "Default" },
+            )
+        }
+
+        if (readContinuously != null) {
+            SwitchItem(
+                title = "Read Continuously",
+                preference = readContinuously
             )
         }
     }

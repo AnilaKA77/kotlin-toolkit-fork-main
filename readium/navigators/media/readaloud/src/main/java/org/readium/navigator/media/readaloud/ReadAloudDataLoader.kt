@@ -36,22 +36,18 @@ internal class ReadAloudDataLoader<E : Error>(
         }
     }
 
-    fun getItemRef(node: ReadAloudNode, prepare: Boolean = true): ItemRef? {
-        loadSegmentForNode(node, prepare)
+    fun getItemRef(node: ReadAloudNode): ItemRef? {
+        loadSegmentForNode(node)
         return preloadedRefs[node]
     }
 
-    private fun loadSegmentForNode(node: ReadAloudNode, prepare: Boolean): ReadAloudSegment? {
+    private fun loadSegmentForNode(node: ReadAloudNode): ReadAloudSegment? {
         if (node in preloadedRefs) {
             return null
         }
 
         val segment = segmentFactory.createSegmentFromNode(node)
             ?: return null // Ended
-
-        if (prepare) {
-            segment.player.prepare()
-        }
 
         val refs = computeRefsForSegment(segment)
         preloadedRefs.putAll(refs)

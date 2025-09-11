@@ -21,4 +21,5 @@ public data class ReadAloudSettings(
     val voices: Map<Language, TtsVoice.Id>,
     val escapableRoles: Set<GuidedNavigationRole>,
     val skippableRoles: Set<GuidedNavigationRole>,
+    val readContinuously: Boolean,
 ) : Settings
