@@ -11,18 +11,29 @@ package org.readium.navigator.media.readaloud
 import org.readium.navigator.media.readaloud.preferences.ReadAloudSettings
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.guided.GuidedNavigationAudioRef
+import org.readium.r2.shared.util.TemporalFragmentParser
 
 internal class ReadAloudNavigationHelper(
     var settings: ReadAloudSettings,
 ) {
 
-    fun ReadAloudNode.firstMatchingLocation(location: ReadAloudGoLocation): ReadAloudNode? =
+    fun ReadAloudNode.firstMatchingLocation(location: ReadAloudLocation): ReadAloudNode? =
         firstDescendantOrNull { it.matchLocation(location) }
 
-    private fun ReadAloudNode.matchLocation(location: ReadAloudGoLocation): Boolean =
-        refs.any { ref ->
-            ref.url.removeFragment() == location.href &&
-                ref.url.fragment == location.cssSelector?.value?.removePrefix("#")
+    private fun ReadAloudNode.matchLocation(location: ReadAloudLocation): Boolean =
+        when (location) {
+            is ReadAloudAudioLocation -> {
+                refs.any { ref ->
+                    val refFragment = ref.url.fragment?.let { TemporalFragmentParser.parse(it) }
+                    ref.url.removeFragment() == location.href && refFragment?.start == location.timeOffset?.value
+                }
+            }
+            is ReadAloudTextLocation -> {
+                refs.any { ref ->
+                    ref.url.removeFragment() == location.href &&
+                        ref.url.fragment == location.cssSelector?.value?.removePrefix("#")
+                }
+            }
         }
 
     fun ReadAloudNode.isSkippable(): Boolean =

@@ -37,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import org.readium.demo.navigator.preferences.UserPreferences
+import org.readium.navigator.media.readaloud.ReadAloudTextHighlightLocation
 import org.readium.r2.shared.ExperimentalReadiumApi
 
 @Composable
@@ -106,11 +107,16 @@ fun ReadAloudRendition(
 
                 Text("Play When Ready: ${playbackState.value.playWhenReady}")
 
-                Text("Resource Href: ${playbackState.value.utteranceLocation?.href}")
+                when (val highlightLocation = playbackState.value.nodeHighlightLocation) {
+                    is ReadAloudTextHighlightLocation -> {
+                        Text("Node Highlight Href: ${highlightLocation.href}")
 
-                Text("Utterance Css Selector ${playbackState.value.utteranceLocation?.cssSelector?.value}")
+                        Text("Node Highlight Css Selector ${highlightLocation.cssSelector?.value}")
 
-                Text("Utterance ${playbackState.value.utteranceLocation?.textQuote?.text}")
+                        Text("Node Highlight Text ${highlightLocation.textQuote?.text}")
+                    }
+                    null -> {}
+                }
             }
 
             Toolbar(readerState)

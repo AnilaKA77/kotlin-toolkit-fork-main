@@ -21,7 +21,6 @@ import org.readium.navigator.common.RenditionState
 import org.readium.navigator.common.SelectionController
 import org.readium.navigator.common.SelectionLocation
 import org.readium.navigator.media.readaloud.ReadAloudNavigator
-import org.readium.navigator.media.readaloud.SystemTtsEngine
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.publication.Publication
 import org.readium.r2.shared.util.AbsoluteUrl
@@ -52,10 +51,13 @@ data class ReadAloudReaderState(
     val url: AbsoluteUrl,
     val coroutineScope: CoroutineScope,
     val publication: Publication,
-    val navigator: ReadAloudNavigator<SystemTtsEngine.Voice, SystemTtsEngine.Error>,
+    val navigator: ReadAloudNavigator,
     val preferencesEditor: StateFlow<ReadAloudPreferencesEditor>,
 ) : ReaderState {
 
     override fun close() {
+        navigator.release()
+        coroutineScope.cancel()
+        publication.close()
     }
 }

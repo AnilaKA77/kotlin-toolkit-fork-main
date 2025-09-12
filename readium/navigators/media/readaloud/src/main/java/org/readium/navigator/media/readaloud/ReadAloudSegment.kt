@@ -12,7 +12,6 @@ import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.guided.GuidedNavigationAudioRef
 import org.readium.r2.shared.guided.GuidedNavigationText
 import org.readium.r2.shared.guided.GuidedNavigationTextRef
-import org.readium.r2.shared.util.Error
 import org.readium.r2.shared.util.Language
 import org.readium.r2.shared.util.TemporalFragmentParser
 import org.readium.r2.shared.util.TimeInterval
@@ -35,14 +34,14 @@ internal data class AudioSegment(
     override val emptyNodes: Set<ReadAloudNode>,
 ) : ReadAloudSegment
 
-internal data class TtsSegment<E : Error>(
+internal data class TtsSegment(
     override val player: PlaybackEngine,
     val items: List<GuidedNavigationText>,
     override val nodes: List<ReadAloudNode>,
     override val emptyNodes: Set<ReadAloudNode>,
 ) : ReadAloudSegment
 
-internal class ReadAloudSegmentFactory<E : Error>(
+internal class ReadAloudSegmentFactory(
     private val audioEngineFactory: (List<AudioChunk>) -> PlaybackEngine?,
     private val ttsEngineFactory: (Language?, List<String>) -> PlaybackEngine?,
 ) {
@@ -92,7 +91,7 @@ internal class ReadAloudSegmentFactory<E : Error>(
 
     private fun createTtsSegmentFromNode(
         firstNode: ReadAloudNode,
-    ): TtsSegment<E>? {
+    ): TtsSegment? {
         var nextNode: ReadAloudNode? = firstNode
         val segmentLanguage = firstNode.text?.language
         val textItems = mutableListOf<GuidedNavigationText>()

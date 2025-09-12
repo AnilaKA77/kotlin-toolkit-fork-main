@@ -12,8 +12,8 @@ import org.readium.navigator.media.readaloud.preferences.ReadAloudSettings
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.util.Error
 
-internal class ReadAloudStateMachine<E : Error>(
-    private val dataLoader: ReadAloudDataLoader<E>,
+internal class ReadAloudStateMachine(
+    private val dataLoader: ReadAloudDataLoader,
     private val navigationHelper: ReadAloudNavigationHelper,
 ) {
 
@@ -103,6 +103,11 @@ internal class ReadAloudStateMachine<E : Error>(
             segment.player.start()
         }
         return copy(playWhenReady = true, playerPaused = false)
+    }
+
+    fun State.release(): State {
+        segment.player.release()
+        return this
     }
 
     fun State.onSettingsChanged(

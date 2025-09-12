@@ -127,7 +127,7 @@ class DemoViewModel(
             val ttsEngineProvider =
                 SystemTtsEngineProvider(application)
 
-            val readAloudFactory = ReadAloudNavigatorFactory(
+            val readAloudFactory = ReadAloudNavigatorFactory.invoke(
                 application = application,
                 publication = publication,
                 audioEngineProvider = audioEngineProvider,

@@ -205,7 +205,7 @@ class ReaderOpener(
     private suspend fun createReadAloudReader(
         url: AbsoluteUrl,
         publication: Publication,
-        navigatorFactory: ReadAloudNavigatorFactory<SystemTtsEngine.Voice, SystemTtsEngine.Error>,
+        navigatorFactory: ReadAloudNavigatorFactory,
         initialLocator: Locator?,
     ): Try<ReadAloudReaderState, Error> {
         val coroutineScope = MainScope()
@@ -222,9 +222,10 @@ class ReaderOpener(
             .getOrElse { return Try.failure(it) }
 
         val preferencesEditor = preferencesManager.preferences.mapStateIn(coroutineScope) {
+            @Suppress("UNCHECKED_CAST")
             ReadAloudPreferencesEditor(
                 editor = navigatorFactory.createPreferencesEditor(it),
-                availableVoices = navigator.voices
+                availableVoices = navigator.voices as Set<SystemTtsEngine.Voice>
             )
         }
 

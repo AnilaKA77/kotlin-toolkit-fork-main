@@ -11,44 +11,54 @@ package org.readium.navigator.media.readaloud
 import android.os.Handler
 import android.os.Looper
 import kotlin.properties.Delegates
+import kotlin.time.Duration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.runningFold
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.readium.navigator.common.CssSelector
-import org.readium.navigator.common.TextQuote
+import org.readium.navigator.common.TimeOffset
 import org.readium.navigator.media.common.MediaNavigator
 import org.readium.navigator.media.readaloud.preferences.ReadAloudSettings
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.InternalReadiumApi
 import org.readium.r2.shared.extensions.addPrefix
 import org.readium.r2.shared.extensions.mapStateIn
+import org.readium.r2.shared.guided.GuidedNavigationAudioRef
 import org.readium.r2.shared.guided.GuidedNavigationTextRef
 import org.readium.r2.shared.util.Error as BaseError
 import org.readium.r2.shared.util.Language
+import org.readium.r2.shared.util.TemporalFragmentParser
 import org.readium.r2.shared.util.Url
 import org.readium.r2.shared.util.data.ReadError
+import org.readium.r2.shared.util.mediatype.MediaType
 
 @ExperimentalReadiumApi
-public class ReadAloudNavigator<V : TtsVoice, E : BaseError> private constructor(
+public class ReadAloudNavigator private constructor(
     private val guidedNavigationTree: ReadAloudNode,
     private val resources: List<ReadAloudPublication.Item>,
-    private val audioEngineFactory: AudioEngineFactory,
-    private val ttsEngineFactory: TtsEngineFactory<V, E>,
+    private val audioEngineFactory: AudioEngineFactory<BaseError>,
+    private val ttsEngineFactory: TtsEngineFactory<TtsVoice, BaseError>,
     initialSettings: ReadAloudSettings,
-    initialLocation: ReadAloudGoLocation?,
+    initialLocation: ReadAloudLocation?,
 ) {
     public companion object {
 
-        internal suspend operator fun <V : TtsVoice, E : BaseError> invoke(
-            initialLocation: ReadAloudGoLocation?,
+        internal suspend operator fun invoke(
+            initialLocation: ReadAloudLocation?,
             initialSettings: ReadAloudSettings,
             publication: ReadAloudPublication,
-            audioEngineFactory: AudioEngineFactory,
-            ttsEngineFactory: TtsEngineFactory<V, E>,
-        ): ReadAloudNavigator<V, E> {
+            audioEngineFactory: AudioEngineFactory<BaseError>,
+            ttsEngineFactory: TtsEngineFactory<TtsVoice, BaseError>,
+        ): ReadAloudNavigator {
             val tree = withContext(Dispatchers.Default) {
                 ReadAloudNode.fromGuidedNavigationObject(publication.guidedNavigationTree)
             }
@@ -65,11 +75,30 @@ public class ReadAloudNavigator<V : TtsVoice, E : BaseError> private constructor
     }
 
     public data class Playback(
-        val state: ReadAloudNavigator.PlaybackState,
+        val state: PlaybackState,
         val playWhenReady: Boolean,
         val node: ReadAloudNode,
-        val utteranceLocation: UtteranceLocation?,
-    )
+        private val textItemMediaType: MediaType?,
+    ) {
+        val nodeHighlightLocation: ReadAloudHighlightLocation? get() {
+            val textRef = node.refs.firstNotNullOfOrNull { it as? GuidedNavigationTextRef }
+                ?: return null
+
+            val href = textRef.url.removeFragment()
+            val cssSelector = textRef.url.fragment
+                ?.let { fragment -> CssSelector(fragment.addPrefix("#")) }
+            return ReadAloudTextHighlightLocation(
+                href = href,
+                textQuote = null,
+                // mediaType = textItemMediaType,
+                cssSelector = cssSelector
+            )
+        }
+
+        val utteranceHighlightLocation: ReadAloudHighlightLocation? get() {
+            return null
+        }
+    }
 
     public sealed interface PlaybackState {
 
@@ -87,14 +116,14 @@ public class ReadAloudNavigator<V : TtsVoice, E : BaseError> private constructor
         override val cause: BaseError?,
     ) : BaseError {
 
-        public data class EngineError(override val cause: BaseError) :
-            Error("An error occurred in the playback engine.", cause)
+        public data class AudioEngineError(override val cause: BaseError) :
+            Error("An error occurred in the audio engine.", cause)
 
-        public data class ContentError(override val cause: ReadError) :
-            Error("An error occurred while trying to read publication content.", cause)
+        public data class TtsEngineError(override val cause: ReadError) :
+            Error("An error occurred in the TTS engine.", cause)
     }
 
-    private inner class PlaybackEngineListener : PlaybackEngine.Listener {
+    private inner class PlaybackEngineListener : PlaybackEngine.Listener<PlaybackEngine.Progress, BaseError> {
 
         private val handler = Handler(Looper.getMainLooper())
 
@@ -114,9 +143,6 @@ public class ReadAloudNavigator<V : TtsVoice, E : BaseError> private constructor
             }
         }
 
-        override fun onStopRequested() {
-        }
-
         override fun onPlaybackCompleted() {
             handler.post {
                 with(stateMachine) {
@@ -125,9 +151,10 @@ public class ReadAloudNavigator<V : TtsVoice, E : BaseError> private constructor
             }
         }
 
-        override fun onRangeStarted(range: IntRange) {
-            handler.post {
-            }
+        override fun onPlaybackError(error: BaseError) {
+        }
+
+        override fun onPlaybackProgressed(progress: PlaybackEngine.Progress) {
         }
     }
 
@@ -140,10 +167,10 @@ public class ReadAloudNavigator<V : TtsVoice, E : BaseError> private constructor
         }
     }
 
-    public val voices: Set<V> =
+    public val voices: Set<TtsVoice> =
         ttsEngineFactory.voices
 
-    private val segmentFactory = ReadAloudSegmentFactory<E>(
+    private val segmentFactory = ReadAloudSegmentFactory(
         audioEngineFactory = { chunks: List<AudioChunk> ->
             audioEngineFactory.createPlaybackEngine(
                 chunks = chunks,
@@ -180,7 +207,7 @@ public class ReadAloudNavigator<V : TtsVoice, E : BaseError> private constructor
 
             voice?.let { voice ->
                 ttsEngineFactory.createPlaybackEngine(
-                    voice = voice,
+                    voiceId = voice.id,
                     utterances = utterances,
                     listener = PlaybackEngineListener()
                 )
@@ -220,60 +247,18 @@ public class ReadAloudNavigator<V : TtsVoice, E : BaseError> private constructor
 
     public val playback: StateFlow<Playback> =
         stateMutable.mapStateIn(coroutineScope) { state ->
+            val textRef = state.node.refs.firstNotNullOfOrNull { it as? GuidedNavigationTextRef }
+            val textHref = textRef?.url?.removeFragment()
+            val textItemMediaType = textHref?.let {
+                resources.firstOrNull { item -> item.href == textHref }?.mediaType
+            }
             Playback(
                 playWhenReady = state.playWhenReady,
                 state = state.playbackState.toState(),
                 node = state.node,
-                utteranceLocation = state.utteranceLocation
+                textItemMediaType = textItemMediaType
             )
         }
-
-    private val ReadAloudStateMachine.State.utteranceLocation: UtteranceLocation? get() =
-        when (segment) {
-            is AudioSegment -> {
-                val textref = segment.textRefs[nodeIndex]
-                val href = textref.removeFragment()
-                val cssSelector = textref.fragment
-                    ?.let { fragment -> CssSelector(fragment.addPrefix("#")) }
-                MediaOverlaysUtteranceLocation(
-                    href = href,
-                    mediaType = resources.first { item -> item.href == href }.mediaType,
-                    cssSelector = cssSelector
-                )
-            }
-            is TtsSegment<*> -> null
-        }
-
-    private val ReadAloudNode.mediaOverlaysUtteranceLocation: UtteranceLocation? get() {
-        val textref = refs.firstNotNullOfOrNull { it as? GuidedNavigationTextRef }
-            ?: return null
-        val href = textref.url.removeFragment()
-        val cssSelector = textref.url.fragment
-            ?.let { fragment -> CssSelector(fragment.addPrefix("#")) }
-        return MediaOverlaysUtteranceLocation(
-            href = href,
-            mediaType = resources.first { item -> item.href == href }.mediaType,
-            cssSelector = cssSelector
-        )
-    }
-
-    private val ReadAloudNode.ttsUtteranceLocation: UtteranceLocation? get() {
-        val textref = refs.firstNotNullOfOrNull { it as? GuidedNavigationTextRef }
-            ?: return null
-        val href = textref.url.removeFragment()
-        val cssSelector = textref.url.fragment
-            ?.let { fragment -> CssSelector(fragment.addPrefix("#")) }
-        val text = text
-            ?: return null
-        return TtsUtteranceLocation(
-            href = href,
-            mediaType = resources.first { item -> item.href == href }.mediaType,
-            cssSelector = cssSelector,
-            // FIXME: prefix and suffix
-            textQuote = TextQuote(text.plain!!, prefix = "", suffix = "")
-        )
-    }
-
     private fun ReadAloudStateMachine.PlaybackState.toState(): PlaybackState =
         when (this) {
             is ReadAloudStateMachine.PlaybackState.Ready ->
@@ -283,11 +268,69 @@ public class ReadAloudNavigator<V : TtsVoice, E : BaseError> private constructor
             is ReadAloudStateMachine.PlaybackState.Ended ->
                 PlaybackState.Ended
             is ReadAloudStateMachine.PlaybackState.Failure ->
-                PlaybackState.Failure(Error.EngineError(error))
+                PlaybackState.Failure(Error.AudioEngineError(error))
         }
 
-    init {
-        play()
+    public val locations: StateFlow<List<ReadAloudLocation>> =
+        stateMutable.runningFold(
+            emptyList()
+        ) { prevLocations: List<ReadAloudLocation>, state ->
+            val textLocation = state.node.toReadAloudTextLocation()
+            val audioLocation = state.node.toReadAloudAudioLocation()
+            buildList {
+                when (state.segment) {
+                    is AudioSegment -> {
+                        audioLocation?.let { add(it) }
+                        textLocation?.let { add(it) }
+                    }
+                    is TtsSegment -> {
+                        textLocation?.let { add(it) }
+                        audioLocation?.let { add(it) }
+                    }
+                }
+
+                if (none { it is ReadAloudTextLocation }) {
+                    prevLocations.firstOrNull { it is ReadAloudTextLocation }
+                        ?.let { add(it) }
+                }
+
+                if (none { it is ReadAloudAudioLocation }) {
+                    prevLocations.firstOrNull { it is ReadAloudAudioLocation }
+                        ?.let { add(it) }
+                }
+            }
+        }.stateInFirst(
+            scope = coroutineScope,
+            started = SharingStarted.Eagerly
+        )
+
+    private fun ReadAloudNode.toReadAloudTextLocation(): ReadAloudTextLocation? {
+        val textRef = refs.firstNotNullOfOrNull { it as? GuidedNavigationTextRef }
+            ?: return null
+        val href = textRef.url.removeFragment()
+        val cssSelector = textRef.url.fragment
+            ?.let { fragment -> CssSelector(fragment.addPrefix("#")) }
+        return ReadAloudTextLocation(href = href, cssSelector = cssSelector, textAnchor = null)
+    }
+
+    private fun ReadAloudNode.toReadAloudAudioLocation(): ReadAloudAudioLocation? {
+        val audioRef = refs.firstNotNullOfOrNull { it as? GuidedNavigationAudioRef }
+            ?: return null
+
+        val href = audioRef.url.removeFragment()
+        val timeOffset = audioRef.url.fragment
+            ?.let { TemporalFragmentParser.parse(it) }
+            ?.start
+            ?.let { TimeOffset(it) }
+        return ReadAloudAudioLocation(href = href, timeOffset = timeOffset)
+    }
+
+    private fun <T> Flow<T>.stateInFirst(
+        scope: CoroutineScope,
+        started: SharingStarted,
+    ): StateFlow<T> {
+        val first = runBlocking { first() }
+        return stateIn(scope, started, first)
     }
 
     public fun play() {
@@ -339,47 +382,31 @@ public class ReadAloudNavigator<V : TtsVoice, E : BaseError> private constructor
         }
     }
 
-    public val location: StateFlow<ReadAloudLocation> =
-        stateMutable.mapStateIn(coroutineScope) { state ->
-            val textref = state.node.refs.firstNotNullOfOrNull { it as? GuidedNavigationTextRef }
-            checkNotNull(textref)
-            val href = textref.url.removeFragment()
-            val cssSelector = textref.url.fragment
-                ?.let { fragment -> CssSelector(fragment.addPrefix("#")) }
-            MediaOverlaysLocation(
-                href = href,
-                mediaType = resources.first { item -> item.href == href }.mediaType,
-                cssSelector = cssSelector
-            )
-        }
-
-    public fun goTo(location: ReadAloudGoLocation) {
+    public fun goTo(location: ReadAloudLocation) {
         with(navigationHelper) {
             guidedNavigationTree.firstMatchingLocation(location)
                 ?.let { go(it) }
         }
     }
 
-    public fun goTo(location: ReadAloudLocation) {
-        val goLocation = when (location) {
-            is MediaOverlaysLocation ->
-                ReadAloudGoLocation(
-                    href = location.href,
-                    cssSelector = location.cssSelector,
-                    textAnchor = location.textAnchor
-                )
-            is TtsLocation ->
-                throw IllegalStateException()
-        }
-        goTo(goLocation)
-    }
-
     public fun goTo(url: Url) {
-        val location = ReadAloudGoLocation(
+        val location = url.fragment?.let { TemporalFragmentParser.parse(it) }
+            ?.let { timeInterval ->
+                val href = url.removeFragment()
+                val timeOffset = TimeOffset(timeInterval.start ?: Duration.ZERO)
+                ReadAloudAudioLocation(href = href, timeOffset = timeOffset)
+            } ?: ReadAloudTextLocation(
             href = url.removeFragment(),
             cssSelector = url.fragment?.let { CssSelector(it.addPrefix("#")) },
             textAnchor = null
         )
+
         goTo(location)
+    }
+
+    public fun release() {
+        with(stateMachine) {
+            stateMutable.value = stateMutable.value.release()
+        }
     }
 }

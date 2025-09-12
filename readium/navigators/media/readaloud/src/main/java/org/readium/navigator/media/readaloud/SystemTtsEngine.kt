@@ -50,7 +50,7 @@ public class SystemTtsEngineProvider(
 ) : TtsEngineProvider<SystemTtsEngine.Voice, SystemTtsEngine.Error> {
 
     override suspend fun createEngineFactory(): TtsEngineFactory<SystemTtsEngine.Voice, SystemTtsEngine.Error> =
-        tryCreateEngineFactory(maxConnectionRetries) ?: NullPlaybackEngineFactory()
+        tryCreateEngineFactory(maxConnectionRetries) ?: NullTtsEngineFactory()
 
     private suspend fun tryCreateEngineFactory(maxRetries: Int): SystemTtsEngineFactory? {
         suspend fun onFailure(): SystemTtsEngineFactory? =
@@ -91,18 +91,18 @@ public class SystemTtsEngineFactory internal constructor(
         fullVoices.keys
 
     override fun createPlaybackEngine(
-        voice: SystemTtsEngine.Voice,
+        voiceId: TtsVoice.Id,
         utterances: List<String>,
-        listener: PlaybackEngine.Listener,
+        listener: PlaybackEngine.Listener<TtsEngineProgress, SystemTtsEngine.Error>,
     ): PlaybackEngine {
-        val voice = fullVoices[voice]
-        checkNotNull(voice)
+        val voice = fullVoices.keys.firstOrNull { it.id == voiceId }
+        requireNotNull(voice) { "Voice id $voiceId doesn't match any voice in $voices." }
 
         return SystemTtsEngine(
             context = context,
             engine = textToSpeech,
             listener = listener,
-            systemVoice = voice,
+            systemVoice = fullVoices[voice]!!,
             utterances = utterances,
             maxConnectionRetries = maxConnectionRetries
         )
@@ -124,7 +124,7 @@ public class SystemTtsEngineFactory internal constructor(
 public class SystemTtsEngine internal constructor(
     private val context: Context,
     engine: TextToSpeech,
-    private val listener: PlaybackEngine.Listener,
+    private val listener: PlaybackEngine.Listener<TtsEngineProgress, Error>,
     private val systemVoice: AndroidVoice,
     private val utterances: List<String>,
     private val maxConnectionRetries: Int,
@@ -317,7 +317,6 @@ public class SystemTtsEngine internal constructor(
     }
 
     public override fun stop() {
-        listener.onStopRequested()
         doStop()
     }
 
@@ -421,7 +420,7 @@ public class SystemTtsEngine internal constructor(
     }
 
     private class UtteranceListener(
-        private val listener: PlaybackEngine.Listener,
+        private val listener: PlaybackEngine.Listener<TtsEngineProgress, Error>,
     ) : UtteranceProgressListener() {
         override fun onStart(utteranceId: String) {
         }
@@ -447,7 +446,7 @@ public class SystemTtsEngine internal constructor(
         }
 
         override fun onRangeStart(utteranceId: String, start: Int, end: Int, frame: Int) {
-            listener.onRangeStarted(start until end)
+            listener.onPlaybackProgressed(TtsEngineProgress(start until end))
         }
     }
 }

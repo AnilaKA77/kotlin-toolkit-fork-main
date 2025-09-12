@@ -20,6 +20,7 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import kotlin.properties.Delegates
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import org.readium.navigator.media.readaloud.AudioChunk
+import org.readium.navigator.media.readaloud.AudioEngineProgress
 import org.readium.navigator.media.readaloud.PlaybackEngine
 import org.readium.r2.shared.ExperimentalReadiumApi
 import org.readium.r2.shared.InternalReadiumApi
@@ -36,7 +37,7 @@ import org.readium.r2.shared.util.data.ReadException
 @androidx.annotation.OptIn(UnstableApi::class)
 public class ExoPlayerEngine private constructor(
     private val exoPlayer: ExoPlayer,
-    private val listener: PlaybackEngine.Listener,
+    private val listener: PlaybackEngine.Listener<AudioEngineProgress, Error>,
 ) : PlaybackEngine {
 
     public companion object {
@@ -45,7 +46,7 @@ public class ExoPlayerEngine private constructor(
             application: Application,
             dataSourceFactory: DataSource.Factory,
             chunks: List<AudioChunk>,
-            listener: PlaybackEngine.Listener,
+            listener: PlaybackEngine.Listener<AudioEngineProgress, Error>,
         ): ExoPlayerEngine {
             val exoPlayer = ExoPlayer.Builder(application)
                 .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
@@ -203,7 +204,6 @@ public class ExoPlayerEngine private constructor(
         exoPlayer.playWhenReady = false
         exoPlayer.seekTo(0)
         state = State.Idle
-        listener.onStopRequested()
     }
 
     override fun resume() {

@@ -43,23 +43,35 @@ internal class ReadAloudSettingsResolver(
             ?: defaults.language
             ?: Language(Locale.getDefault())
 
-        val defaultSkippableRoles: Set<GuidedNavigationRole> =
-            setOf(
-                ASIDE, BIBLIOGRAPHY, ENDNOTES, FOOTNOTE, NOTEREF, PULLQUOTE,
-                LANDMARKS, LOA, LOI, LOT, LOV, PAGEBREAK, TOC
-            )
+        val skippableRoles: Set<GuidedNavigationRole> =
+            preferences.skippableRoles
+                ?: defaults.skippableRoles
+                ?: setOf(
+                    ASIDE, BIBLIOGRAPHY, ENDNOTES, FOOTNOTE, NOTEREF, PULLQUOTE,
+                    LANDMARKS, LOA, LOI, LOT, LOV, PAGEBREAK, TOC
+                )
 
-        val defaultEscapableRoles: Set<GuidedNavigationRole> =
-            setOf(ASIDE, FIGURE, LIST, LIST_ITEM, TABLE, ROW, CELL)
+        val escapableRoles: Set<GuidedNavigationRole> =
+            preferences.escapableRoles
+                ?: defaults.escapableRoles
+                ?: setOf(ASIDE, FIGURE, LIST, LIST_ITEM, TABLE, ROW, CELL)
+
+        val languagesWithPreferredVoice =
+            preferences.voices.orEmpty().keys.map { it.removeRegion() }
+
+        val filteredDefaultVoices = defaults.voices.orEmpty()
+            .filter { it.key.removeRegion() !in languagesWithPreferredVoice }
+
+        val voices = filteredDefaultVoices + preferences.voices.orEmpty()
 
         return ReadAloudSettings(
             language = language,
-            voices = preferences.voices ?: emptyMap(),
+            voices = voices,
             pitch = preferences.pitch ?: defaults.pitch ?: 1.0,
             speed = preferences.speed ?: defaults.speed ?: 1.0,
             overrideContentLanguage = preferences.language != null,
-            escapableRoles = preferences.escapableRoles ?: defaultEscapableRoles,
-            skippableRoles = preferences.skippableRoles ?: defaultSkippableRoles,
+            escapableRoles = escapableRoles,
+            skippableRoles = skippableRoles,
             readContinuously = preferences.readContinuously ?: defaults.readContinuously ?: true
         )
     }

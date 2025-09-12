@@ -72,3 +72,9 @@ public interface PositionLocation : Location {
 
     public val position: Position
 }
+
+@ExperimentalReadiumApi
+public interface TimeOffsetLocation : Location {
+
+    public val timeOffset: TimeOffset
+}

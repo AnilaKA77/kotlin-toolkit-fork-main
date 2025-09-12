@@ -12,6 +12,7 @@ import android.app.Application
 import org.readium.adapter.exoplayer.audio.ExoPlayerDataSource
 import org.readium.navigator.media.readaloud.AudioChunk
 import org.readium.navigator.media.readaloud.AudioEngineFactory
+import org.readium.navigator.media.readaloud.AudioEngineProgress
 import org.readium.navigator.media.readaloud.AudioEngineProvider
 import org.readium.navigator.media.readaloud.PlaybackEngine
 import org.readium.r2.shared.ExperimentalReadiumApi
@@ -21,9 +22,9 @@ import org.readium.r2.shared.publication.Publication
 @ExperimentalReadiumApi
 public class ExoPlayerEngineProvider(
     private val application: Application,
-) : AudioEngineProvider {
+) : AudioEngineProvider<ExoPlayerEngine.Error> {
 
-    override fun createEngineFactory(publication: Publication): AudioEngineFactory {
+    override fun createEngineFactory(publication: Publication): ExoPlayerEngineFactory {
         val dataSourceFactory = ExoPlayerDataSource.Factory(publication)
         return ExoPlayerEngineFactory(application, dataSourceFactory)
     }
@@ -33,11 +34,11 @@ public class ExoPlayerEngineProvider(
 public class ExoPlayerEngineFactory internal constructor(
     private val application: Application,
     private val dataSourceFactory: ExoPlayerDataSource.Factory,
-) : AudioEngineFactory {
+) : AudioEngineFactory<ExoPlayerEngine.Error> {
 
     override fun createPlaybackEngine(
         chunks: List<AudioChunk>,
-        listener: PlaybackEngine.Listener,
+        listener: PlaybackEngine.Listener<AudioEngineProgress, ExoPlayerEngine.Error>,
     ): PlaybackEngine {
         return ExoPlayerEngine(application, dataSourceFactory, chunks, listener)
     }

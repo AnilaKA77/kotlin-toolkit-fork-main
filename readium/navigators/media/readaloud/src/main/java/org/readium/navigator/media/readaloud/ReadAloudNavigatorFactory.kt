@@ -24,23 +24,23 @@ import org.readium.r2.shared.util.data.ReadError
 import org.readium.r2.shared.util.getOrElse
 
 @ExperimentalReadiumApi
-public class ReadAloudNavigatorFactory<V : TtsVoice, E : BaseError> private constructor(
+public class ReadAloudNavigatorFactory private constructor(
     private val publicationMetadata: Metadata,
     private val guidedNavigationService: GuidedNavigationService,
     private val resources: List<ReadAloudPublication.Item>,
-    private val audioEngineFactory: AudioEngineFactory,
-    private val ttsEngineProvider: TtsEngineProvider<V, E>,
+    private val audioEngineFactory: () -> AudioEngineFactory<BaseError>,
+    private val ttsEngineProvider: TtsEngineProvider<TtsVoice, BaseError>,
 ) {
 
     public companion object {
 
-        public operator fun <V : TtsVoice, E : BaseError> invoke(
+        public operator fun invoke(
             application: Application,
             publication: Publication,
-            audioEngineProvider: AudioEngineProvider,
-            ttsEngineProvider: TtsEngineProvider<V, E>,
+            audioEngineProvider: AudioEngineProvider<BaseError>,
+            ttsEngineProvider: TtsEngineProvider<TtsVoice, BaseError>,
             usePrerecordedVoicesWhenAvailable: Boolean = true,
-        ): ReadAloudNavigatorFactory<V, E>? {
+        ): ReadAloudNavigatorFactory? {
             var guidedNavService: GuidedNavigationService? = null
 
             if (usePrerecordedVoicesWhenAvailable) {
@@ -52,14 +52,12 @@ public class ReadAloudNavigatorFactory<V : TtsVoice, E : BaseError> private cons
 
             if (guidedNavService == null) {
                 publication.findService(ContentService::class)
-                    ?.let { guidedNavService = TtsGuidedNavigationService(it) }
+                    ?.let { guidedNavService = ContentGuidedNavigationService(it) }
             }
 
             if (guidedNavService == null) {
                 return null
             }
-
-            val audioEngineFactory = audioEngineProvider.createEngineFactory(publication)
 
             val resources = (publication.readingOrder + publication.resources).map {
                 ReadAloudPublication.Item(
@@ -72,7 +70,7 @@ public class ReadAloudNavigatorFactory<V : TtsVoice, E : BaseError> private cons
                 publicationMetadata = publication.metadata,
                 guidedNavigationService = guidedNavService,
                 resources = resources,
-                audioEngineFactory = audioEngineFactory,
+                audioEngineFactory = { audioEngineProvider.createEngineFactory(publication) },
                 ttsEngineProvider = ttsEngineProvider
             )
         }
@@ -94,8 +92,8 @@ public class ReadAloudNavigatorFactory<V : TtsVoice, E : BaseError> private cons
 
     public suspend fun createNavigator(
         initialSettings: ReadAloudSettings,
-        initialLocation: ReadAloudGoLocation? = null,
-    ): Try<ReadAloudNavigator<V, E>, Error> {
+        initialLocation: ReadAloudLocation? = null,
+    ): Try<ReadAloudNavigator, Error> {
         val guidedDocs = buildList {
             val iterator = guidedNavigationService.iterator()
             while (iterator.hasNext()) {
@@ -120,14 +118,12 @@ public class ReadAloudNavigatorFactory<V : TtsVoice, E : BaseError> private cons
             resources = resources,
         )
 
-        val ttsEngineFactory = ttsEngineProvider.createEngineFactory()
-
         val navigator = ReadAloudNavigator(
             initialSettings = initialSettings,
             initialLocation = initialLocation,
             publication = navigatorPublication,
-            audioEngineFactory = audioEngineFactory,
-            ttsEngineFactory = ttsEngineFactory
+            audioEngineFactory = audioEngineFactory(),
+            ttsEngineFactory = ttsEngineProvider.createEngineFactory()
         )
 
         return Try.success(navigator)

@@ -13,14 +13,17 @@ import org.readium.r2.shared.guided.GuidedNavigationDocument
 import org.readium.r2.shared.guided.GuidedNavigationObject
 import org.readium.r2.shared.guided.GuidedNavigationText
 import org.readium.r2.shared.guided.GuidedNavigationTextRef
+import org.readium.r2.shared.publication.Locator
+import org.readium.r2.shared.publication.html.cssSelector
 import org.readium.r2.shared.publication.services.GuidedNavigationIterator
 import org.readium.r2.shared.publication.services.GuidedNavigationService
 import org.readium.r2.shared.publication.services.content.Content
 import org.readium.r2.shared.publication.services.content.ContentService
 import org.readium.r2.shared.util.Try
+import org.readium.r2.shared.util.Url
 import org.readium.r2.shared.util.data.ReadError
 
-internal class TtsGuidedNavigationService(
+internal class ContentGuidedNavigationService(
     private val contentService: ContentService,
 ) : GuidedNavigationService {
 
@@ -59,13 +62,12 @@ internal class TtsGuidedNavigationService(
                 val nodes = when (val element = contentIterator.next()) {
                     is Content.TextElement -> {
                         element.segments.mapNotNull { segment ->
-                            if (segment.text.isEmpty()) {
+                            if (segment.text.isBlank()) {
                                 return@mapNotNull null
                             }
+
                             GuidedNavigationObject(
-                                refs = setOf(
-                                    GuidedNavigationTextRef(segment.locator.href)
-                                ),
+                                refs = setOfNotNull(segment.locator.toTextRef()),
                                 text = GuidedNavigationText(
                                     plain = segment.text,
                                     ssml = null,
@@ -81,9 +83,7 @@ internal class TtsGuidedNavigationService(
                                 ?.takeIf { it.isNotBlank() }
                                 ?.let {
                                     GuidedNavigationObject(
-                                        refs = setOf(
-                                            GuidedNavigationTextRef(element.locator.href)
-                                        ),
+                                        refs = setOfNotNull(element.locator.toTextRef()),
                                         text = GuidedNavigationText(it)
                                     )
                                 }
@@ -103,6 +103,14 @@ internal class TtsGuidedNavigationService(
             }
 
             return GuidedNavigationDocument(guided = tree)
+        }
+
+        private fun Locator.toTextRef(): GuidedNavigationTextRef? {
+            val htmlId = locations.cssSelector
+                ?.takeIf { it.startsWith("#") }
+                .orEmpty()
+            val url = Url("$href$htmlId")
+            return url?.let { GuidedNavigationTextRef(it) }
         }
     }
 }
