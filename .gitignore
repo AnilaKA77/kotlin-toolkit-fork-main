@@ -99,3 +99,4 @@ lcp.patch
 
 # Script outpouts
 readium/navigators/web/scripts/dist/
+.idea/markdown.xml
